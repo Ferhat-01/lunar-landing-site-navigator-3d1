@@ -1,0 +1,3209 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunar Landing Site Navigator 3D | NASA Space Apps 2026</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg: #060a12;
+            --card: rgba(15, 23, 42, 0.78);
+            --border: rgba(148, 163, 184, 0.15);
+            --accent: #38bdf8;
+            --sun: #facc15;
+            --earth: #4ade80;
+            --danger: #f87171;
+            --orange: #fb923c;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+
+        body {
+            background:
+                radial-gradient(ellipse at 15% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 85% 0%, rgba(99, 102, 241, 0.07) 0%, transparent 50%),
+                #060a12;
+            color: var(--text);
+            padding: 20px 28px 100px 28px;
+            max-width: 1440px;
+            margin: 0 auto;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+            border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 14px;
+        }
+        header h1 { font-size: 1.32rem; color: #f8fafc; letter-spacing: 0.4px; font-weight: 800; }
+        header p { font-size: 0.80rem; color: var(--muted); margin-top: 3px; }
+        .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .data-pill {
+            background: rgba(74, 222, 128, 0.10); border: 1px solid rgba(74, 222, 128, 0.30);
+            color: #4ade80; padding: 5px 11px; border-radius: 20px; font-size: 0.74rem; font-weight: 600;
+        }
+        .mode-switch {
+            display: flex; background: rgba(11, 17, 32, 0.9); border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 20px; padding: 3px;
+        }
+        .mode-btn {
+            background: transparent; border: none; color: var(--muted); padding: 5px 12px;
+            border-radius: 16px; font-size: 0.76rem; font-weight: 600; cursor: pointer; height: auto; width: auto; transition: all 0.2s;
+        }
+        .mode-btn.active { background: var(--accent); color: #090d16; }
+
+        /* Göz yormayan tek satırlık kompakt Hızlı Senaryo Çubuğu */
+        .scenario-bar {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 9px 14px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .scenario-bar-head {
+            display: flex; align-items: center; gap: 8px; margin-bottom: 0;
+        }
+        .scenario-bar-title {
+            font-size: 0.74rem; font-weight: 700; color: #38bdf8;
+            letter-spacing: 0.4px; text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .scenario-bar-sub { display: none; }
+        .scenario-grid {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            flex: 1;
+            justify-content: flex-end;
+        }
+        .scenario-chip {
+            text-align: left;
+            background: rgba(11, 17, 32, 0.85);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 999px;
+            padding: 6px 13px;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: auto;
+            height: auto;
+        }
+        .scenario-chip:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            background: rgba(30, 41, 59, 0.85);
+            transform: translateY(-1px);
+        }
+        .scenario-chip.active {
+            border-color: var(--accent);
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.20), rgba(15, 23, 42, 0.95));
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.22);
+        }
+        .scenario-chip-top {
+            display: flex; align-items: center; gap: 7px;
+        }
+        .scenario-title {
+            font-size: 0.78rem; font-weight: 600; color: #f8fafc; white-space: nowrap;
+        }
+        .scenario-tag {
+            font-size: 0.64rem; font-weight: 700; padding: 2px 7px;
+            border-radius: 999px; background: rgba(56, 189, 248, 0.14);
+            color: #7dd3fc; white-space: nowrap;
+        }
+        .scenario-desc { display: none; }
+
+        /* Çok Sayfalı (Sekmeli) Ana Navigasyon Barı */
+        .page-nav-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            background: rgba(11, 17, 32, 0.88);
+            backdrop-filter: blur(12px);
+            padding: 7px;
+            border-radius: 14px;
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            margin-bottom: 18px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+        }
+        @media (max-width: 900px) {
+            .page-nav-bar { grid-template-columns: repeat(2, 1fr); }
+        }
+        .page-tab-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 11px 14px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            transition: all 0.2s ease;
+        }
+        .page-tab-btn:hover {
+            color: #f8fafc;
+            background: rgba(30, 41, 59, 0.55);
+        }
+        .page-tab-btn.active {
+            background: linear-gradient(135deg, rgba(2, 132, 199, 0.28), rgba(37, 99, 235, 0.22));
+            color: #f8fafc;
+            border-color: rgba(56, 189, 248, 0.55);
+            box-shadow: 0 4px 16px rgba(2, 132, 199, 0.22);
+        }
+        .page-tab-badge {
+            font-size: 0.68rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.16);
+            color: #7dd3fc;
+            font-weight: 700;
+        }
+        .page-section {
+            display: none;
+            animation: fadeInPage 0.22s ease-out;
+        }
+        .page-section.active {
+            display: block;
+        }
+        @keyframes fadeInPage {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .page-footer-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+        .page-next-btn {
+            background: rgba(56, 189, 248, 0.14);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, 0.38);
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            width: auto;
+            transition: all 0.2s;
+        }
+        .page-next-btn:hover {
+            background: var(--accent);
+            color: #090d16;
+        }
+
+        body { padding-bottom: 100px; }
+        .controls {
+            display: grid;
+            grid-template-columns: 1.05fr 1.38fr 0.92fr 1.05fr 1.38fr auto;
+            gap: 10px; background: var(--card); padding: 14px 16px; border-radius: 12px;
+            border: 1px solid var(--border); margin-bottom: 16px; align-items: stretch;
+        }
+        @media (max-width: 1280px) {
+            .controls { grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); }
+        }
+        .custom-coord-bar {
+            display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px; background: rgba(56, 189, 248, 0.08); padding: 14px 16px;
+            border-radius: 10px; border: 1px dashed var(--accent); margin-bottom: 16px; align-items: end;
+        }
+        .control-group {
+            display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
+            padding: 9px 11px; border-radius: 9px; min-width: 0; overflow: hidden;
+            background: rgba(11, 17, 32, 0.55); border: 1px solid rgba(51, 65, 85, 0.55);
+        }
+        .control-group.ctrl-a {
+            border-left: 3.5px solid #38bdf8;
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.10) 0%, rgba(11, 17, 32, 0.55) 100%);
+        }
+        .control-group.ctrl-a label { color: #7dd3fc; }
+        .control-group.ctrl-b {
+            border-left: 3.5px solid #fb923c;
+            background: linear-gradient(90deg, rgba(251, 146, 60, 0.10) 0%, rgba(11, 17, 32, 0.55) 100%);
+        }
+        .control-group.ctrl-b label { color: #fdba74; }
+        label {
+            font-size: 0.71rem; color: var(--muted); font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.25px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        select, input, button {
+            background: #0b1120; color: var(--text); border: 1px solid #334155;
+            padding: 8px 10px; border-radius: 8px; font-size: 0.85rem; width: 100%; min-width: 0;
+        }
+        .datetime-row {
+            display: grid; grid-template-columns: 1.38fr 0.92fr; gap: 6px; width: 100%; min-width: 0;
+        }
+        .datetime-row input {
+            padding: 8px 6px; font-size: 0.81rem; min-width: 0; width: 100%;
+        }
+        button.primary-btn {
+            background: linear-gradient(135deg, #0284c7, #2563eb); border: none;
+            font-weight: 600; cursor: pointer; align-self: stretch;
+            padding: 0 18px; min-height: 42px; white-space: nowrap; width: auto;
+        }
+        button.primary-btn:hover { filter: brightness(1.1); }
+
+        .edu-box {
+            display: none; background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.3);
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; font-size: 0.88rem; line-height: 1.5;
+        }
+        .edu-box strong { color: var(--sun); }
+
+        .summary-banner {
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(17, 24, 39, 0.9));
+            border-left: 4px solid var(--accent); border-radius: 10px;
+            padding: 16px 20px; margin-bottom: 18px; line-height: 1.55;
+        }
+        .summary-banner h2 { font-size: 1rem; color: var(--accent); margin-bottom: 6px; }
+        .summary-banner p { font-size: 0.93rem; color: #e2e8f0; }
+
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+        }
+        .kpi-title { font-size: 0.73rem; color: var(--muted); font-weight: 700; letter-spacing: 0.3px; }
+        .kpi-value { font-size: 1.65rem; font-weight: 700; margin: 5px 0 6px 0; }
+        .kpi-bar {
+            width: 100%; height: 6px; background: rgba(11, 17, 32, 0.88);
+            border-radius: 999px; overflow: hidden; margin-bottom: 8px;
+            border: 1px solid rgba(51, 65, 85, 0.65);
+        }
+        .kpi-bar-fill {
+            height: 100%; border-radius: 999px; transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .kpi-sub { font-size: 0.80rem; color: var(--muted); line-height: 1.35; }
+        .kpi-sub-wrap {
+            font-size: 0.76rem; color: #cbd5e1; line-height: 1.35;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; white-space: normal;
+        }
+
+        .split-grid {
+            display: grid; grid-template-columns: 1.1fr 1.3fr; gap: 20px; margin-bottom: 20px;
+        }
+        @media (max-width: 1024px) { .split-grid { grid-template-columns: 1fr; } }
+
+        .chart-box {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 18px; margin-bottom: 20px;
+        }
+        .split-grid .chart-box { margin-bottom: 0; }
+        .chart-header { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .chart-header h3 { font-size: 1.02rem; color: #f8fafc; }
+        .chart-header p { font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+
+        /* Three.js Sahne Konteyneri */
+        .space-viewport {
+            position: relative;
+            width: 100%;
+            height: 365px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #0b132b 0%, #03050a 100%);
+            border: 1px solid #1e293b;
+        }
+        .hud-overlay {
+            position: absolute;
+            top: 10px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .hud-badge {
+            background: rgba(9, 13, 22, 0.78);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            padding: 6px 11px;
+            border-radius: 8px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hud-legend {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            background: rgba(9, 13, 22, 0.75);
+            backdrop-filter: blur(4px);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            color: #cbd5e1;
+            pointer-events: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            z-index: 5;
+        }
+
+        .map-viewport {
+            position: relative;
+            width: 100%;
+            height: 365px;
+            border-radius: 10px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 20% 25%, rgba(56, 189, 248, 0.08) 0%, transparent 45%),
+                radial-gradient(circle at 80% 75%, rgba(251, 146, 60, 0.06) 0%, transparent 45%),
+                radial-gradient(circle at center, #091326 0%, #03060d 100%);
+            border: 1px solid #1e293b;
+            box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.65);
+        }
+        .map-ctrl-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 6px; background: #0b1120;
+            padding: 8px 12px; border-radius: 8px; border: 1px solid #1e293b; margin-top: 10px;
+        }
+        .map-ctrl-group {
+            display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+        }
+        .map-ctrl-btn {
+            background: #131c31; color: #cbd5e1; border: 1px solid #263554;
+            border-radius: 6px; padding: 5px 9px; font-size: 0.74rem; font-weight: 600;
+            cursor: pointer; width: auto; height: auto; transition: all 0.18s; white-space: nowrap;
+        }
+        .map-ctrl-btn:hover { border-color: var(--accent); color: #f8fafc; }
+        .map-ctrl-btn.active {
+            background: rgba(56, 189, 248, 0.18); color: #38bdf8;
+            border-color: #38bdf8; box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+        }
+
+        .anim-bar {
+            display: flex; align-items: center; gap: 12px; background: #0b1120;
+            padding: 10px 14px; border-radius: 8px; border: 1px solid #1e293b; margin-top: 10px;
+        }
+        .anim-btn {
+            background: var(--accent); color: #090d16; border: none; border-radius: 6px;
+            padding: 6px 14px; font-weight: 700; cursor: pointer; width: auto; height: auto; font-size: 0.82rem;
+        }
+        .anim-slider { flex: 1; accent-color: var(--accent); cursor: pointer; padding: 0; border: none; }
+        .anim-label { font-size: 0.8rem; color: var(--sun); font-weight: 600; min-width: 145px; text-align: right; }
+
+        .compare-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .compare-table th, .compare-table td {
+            padding: 11px 14px; border-bottom: 1px solid var(--border); text-align: left;
+        }
+        .compare-table th { color: var(--accent); background: #0b1120; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.76rem; font-weight: 600; }
+        .badge-go { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+        .badge-caution { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+        .badge-nogo { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+        #loader { display: none; color: var(--sun); font-size: 0.85rem; font-weight: 600; }
+
+        .cell-win { background: rgba(56, 189, 248, 0.06); }
+        .adv-badge {
+            display: inline-block; padding: 4px 9px; border-radius: 6px;
+            font-size: 0.78rem; font-weight: 600; line-height: 1.35;
+        }
+        .adv-a { background: rgba(56, 189, 248, 0.14); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); }
+        .adv-b { background: rgba(251, 146, 60, 0.14); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.35); }
+        .adv-tie { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+        .adv-warn { background: rgba(248, 113, 113, 0.14); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.35); }
+
+        .ai-summary-card {
+            margin-top: 14px; background: #0b1120; border: 1px solid rgba(56, 189, 248, 0.32);
+            border-left: 4px solid var(--accent); border-radius: 10px; padding: 14px 16px;
+            font-size: 0.87rem; line-height: 1.6; color: #e2e8f0;
+        }
+        .ai-summary-title {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px; font-weight: 700; color: var(--accent); font-size: 0.88rem;
+        }
+        .ai-sec-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 10px;
+        }
+        .ai-sec-stack {
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .ai-sec-card {
+            background: rgba(15, 23, 42, 0.82); border: 1px solid rgba(51, 65, 85, 0.75);
+            border-left: 3.5px solid #38bdf8; border-radius: 8px;
+            padding: 10px 12px; font-size: 0.82rem; line-height: 1.55; color: #e2e8f0;
+        }
+        .ai-sec-card:nth-child(1) { border-left-color: #facc15; background: linear-gradient(90deg, rgba(250, 204, 21, 0.08) 0%, rgba(15, 23, 42, 0.85) 100%); grid-column: 1 / -1; }
+        .ai-sec-card:nth-child(2) { border-left-color: #fb923c; }
+        .ai-sec-card:nth-child(3) { border-left-color: #4ade80; }
+        .ai-sec-card:nth-child(4) { border-left-color: #38bdf8; }
+        .ai-sec-card:nth-child(5) { border-left-color: #a855f7; grid-column: 1 / -1; }
+
+        .mascot-widget {
+            position: fixed; right: 20px; bottom: 18px; z-index: 9999;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+        }
+        .mascot-bubble {
+            display: none;
+            width: 430px; max-width: calc(100vw - 32px);
+            background: rgba(15, 23, 42, 0.97); backdrop-filter: blur(12px);
+            border: 1px solid #38bdf8; border-radius: 14px;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.78); overflow: hidden;
+        }
+        .mascot-bottom-row {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .mascot-quick-pill {
+            background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(10px);
+            border: 1px solid rgba(56, 189, 248, 0.45); border-radius: 999px;
+            padding: 8px 14px; font-size: 0.78rem; font-weight: 600; color: #e2e8f0;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55); cursor: pointer;
+            display: flex; align-items: center; gap: 8px;
+            max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            transition: all 0.2s;
+        }
+        .mascot-quick-pill:hover {
+            border-color: var(--accent); background: rgba(30, 41, 59, 0.98);
+            transform: translateY(-1px);
+        }
+        .mascot-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 6px;
+            padding: 10px 12px; background: #0b1120; border-bottom: 1px solid #1e293b;
+        }
+        .mascot-head-btn {
+            background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+            border-radius: 6px; padding: 3px 8px; font-size: 0.72rem; font-weight: 600;
+            cursor: pointer; width: auto; height: auto;
+        }
+        .mascot-head-btn:hover { border-color: var(--accent); color: #f8fafc; }
+        .mascot-body {
+            padding: 13px 15px; font-size: 0.83rem; line-height: 1.62;
+            color: #e2e8f0; max-height: 330px; overflow-y: auto;
+        }
+        .mascot-ask-bar {
+            display: flex; gap: 6px; padding: 10px 12px;
+            border-top: 1px solid #1e293b; background: #0b1120;
+        }
+        .mascot-ask-bar input {
+            flex: 1; height: 34px; font-size: 0.80rem; padding: 0 10px;
+        }
+        .mascot-ask-bar button {
+            width: auto; height: 34px; padding: 0 12px; font-size: 0.80rem;
+            background: var(--accent); color: #090d16; font-weight: 700; border: none; border-radius: 6px; cursor: pointer;
+        }
+        .mascot-avatar-btn {
+            width: 72px; height: 72px; border-radius: 50%; cursor: pointer;
+            background: radial-gradient(circle at 30% 30%, #1e293b, #090d16);
+            padding: 4px; display: flex; align-items: center; justify-content: center;
+            overflow: hidden; transition: transform 0.2s, box-shadow 0.3s;
+            border: 2px solid var(--accent); box-shadow: 0 0 18px rgba(56, 189, 248, 0.45);
+        }
+        .mascot-avatar-btn:hover { transform: scale(1.06); }
+        .mascot-avatar-btn.status-go { border-color: #4ade80; box-shadow: 0 0 20px rgba(74, 222, 128, 0.55); }
+        .mascot-avatar-btn.status-caution { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.55); }
+        .mascot-avatar-btn.status-nogo { border-color: #f87171; box-shadow: 0 0 20px rgba(248, 113, 113, 0.55); }
+        #mascotCustomImg { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1 id="hdrTitle">AY İNİŞ YERİ NAVİGATÖRÜ 3D (LUNAR LANDING SITE NAVIGATOR)</h1>
+        <p id="hdrSub">Artemis, CLPS, CNSA, ISRO, ESA/JAXA ve Özel Koordinatlar İçin Gerçek NASA LOLA DEM (80m/px) + JPL Horizons Planlayıcısı</p>
+    </div>
+    <div class="header-right">
+        <div class="mode-switch" title="Dil Seçimi / Language">
+            <button class="mode-btn active" id="btnLangTR" onclick="setLanguage('tr')">🇹🇷 TR</button>
+            <button class="mode-btn" id="btnLangEN" onclick="setLanguage('en')">🇬🇧 EN</button>
+        </div>
+        <div class="mode-switch">
+            <button class="mode-btn active" id="btnEng" onclick="setViewMode('eng')">Mühendislik Modu</button>
+            <button class="mode-btn" id="btnEdu" onclick="setViewMode('edu')">Eğitim & Halk Modu</button>
+        </div>
+        <span class="data-pill" id="sourceBadge">NASA LOLA + JPL Horizons Aktif</span>
+        <div id="loader">Hesaplanıyor...</div>
+    </div>
+</header>
+
+<div class="edu-box" id="eduBox">
+    <div id="eduBoxTitle" style="font-size:0.95rem; font-weight:700; color:var(--sun); margin-bottom:8px;">🎓 Eğitim & Halk Rehberi: Ay Güney Kutbu Neden Tarihin En Zorlu Görev Hedefidir?</div>
+    <ul id="eduBoxList" style="margin-left:20px; line-height:1.6; display:flex; flex-direction:column; gap:6px;">
+        <li><strong>1.54° Eksen Eğikliği & Ufuk Boyu Güneş:</strong> Dünya'nın ekseni 23.5° eğikken Ay'ın ekseni yalnızca 1.54° eğiktir. Bu nedenle Güney Kutbu'nda Güneş göğe yükselmez, ufuk çizgisini sıyırarak 360° döner. Dağ tepeleri neredeyse sürekli ışık alırken, krater tabanları milyarlarca yıldır zifiri karanlıktadır.</li>
+        <li><strong>Kalıcı Gölge Bölgeleri (PSR) & Su Buzu:</strong> Kraterlerin dibi -240°C'ye varan dondurucu soğukluktadır. Güneş ışığı görmeyen bu "Kalıcı Gölge Bölgeleri"nde (Permanently Shadowed Regions - PSR) geleceğin Ay üssü, içme suyu ve roket yakıtı (sıvı hidrojen/oksijen) için hayati olan milyarlarca tonluk <strong>su buzu</strong> saklıdır.</li>
+        <li><strong>Apollo (Ekvator) ile Artemis (Güney Kutbu) Tezadı:</strong> Geçmişteki tarihi Apollo görevleri Ay ekvatoruna inmişti. Ekvatorda Güneş gökyüzünün tam tepesine (~80°-90°) çıkar ve 14 Dünya günü boyunca kesintisiz aydınlatır; Dünya ise gökyüzünde sabittir. Güney Kutbu'nda ise küçük bir krater sırtı Güneş'i veya Dünya'yı anında örter; uzay aracı saniyeler içinde dondurucu karanlığa gömülür.</li>
+        <li><strong>Ay'ın Yalpalaması (Librasyon) & İletişim Gecikmesi:</strong> Ay Dünya'ya hep aynı yüzünü dönse de, yörüngesindeki salınım (optik ve fiziksel librasyon) nedeniyle Dünya Güney Kutbu ufkunda ±6° ile ±8° arasında adeta dans eder. ~384.400 km'lik mesafe nedeniyle Dünya'ya gönderilen bir radyo telemetri sinyali tek yönde <strong>~1.28 saniyede</strong> (OWLT - One Way Light Time) ulaşır.</li>
+    </ul>
+</div>
+
+<div class="scenario-bar" id="scenarioBar">
+    <div class="scenario-bar-head">
+        <div class="scenario-bar-title" id="scenBarTitle">⚡ Hızlı Görev & Karşılaştırma Senaryoları (Tek Tıkla Simülasyon)</div>
+        <div class="scenario-bar-sub" id="scenBarSub">Fırlatma gecikmesi, topografik gölge farkı, uluslararası görevler ve ekvator-kutup kıyaslamasını anında test edin.</div>
+    </div>
+    <div class="scenario-grid">
+        <button type="button" class="scenario-chip" id="preset_delay" onclick="applyScenarioPreset('delay', this)">
+            <div class="scenario-chip-top">
+                <span class="scenario-title" id="sc1Title">🚀 Fırlatma +7 Gün Gecikirse</span>
+                <span class="scenario-tag" id="sc1Tag">Takvim Kayması</span>
+            </div>
+            <div class="scenario-desc" id="sc1Desc">Shackleton Rim'de 15 Kasım yerine 22 Kasım'da inilirse enerji ve Dünya iletişimi nasıl değişir?</div>
+        </button>
+        <button type="button" class="scenario-chip" id="preset_topography" onclick="applyScenarioPreset('topography', this)">
+            <div class="scenario-chip-top">
+                <span class="scenario-title" id="sc2Title">🏔️ Aydınlık Sırt vs. Krater Çukuru</span>
+                <span class="scenario-tag" id="sc2Tag">LOLA Topografya</span>
+            </div>
+            <div class="scenario-desc" id="sc2Desc">Birkaç km mesafedeki derin krater gölgesi (-88.8°S) ile yüksek sırtın (%90+ güneş) dramatik farkı.</div>
+        </button>
+        <button type="button" class="scenario-chip" id="preset_international" onclick="applyScenarioPreset('international', this)">
+            <div class="scenario-chip-top">
+                <span class="scenario-title" id="sc3Title">🌐 Uluslararası Kutup Yarışı</span>
+                <span class="scenario-tag" id="sc3Tag">CNSA vs. NASA</span>
+            </div>
+            <div class="scenario-desc" id="sc3Desc">Çin Chang'e-7 (Shackleton Sırtı) ile NASA VIPER (Nobile Rim 1) hedeflerinin yan yana analizi.</div>
+        </button>
+        <button type="button" class="scenario-chip" id="preset_apollo_edu" onclick="applyScenarioPreset('apollo_edu', this)">
+            <div class="scenario-chip-top">
+                <span class="scenario-title" id="sc4Title">🎓 Kutup vs. Tarihi Apollo 11</span>
+                <span class="scenario-tag" id="sc4Tag">Eğitim & Halk</span>
+            </div>
+            <div class="scenario-desc" id="sc4Desc">Güney Kutbu'nda ufku sıyıran Güneş ile Apollo 11 Ekvator düzlüğündeki 90° tepe güneşinin farkı.</div>
+        </button>
+    </div>
+</div>
+
+<div class="controls">
+    <div class="control-group ctrl-a">
+        <label id="lblSiteA">🔵 Seçenek A: İniş Bölgesi</label>
+        <select id="siteA" onchange="toggleCustomBar()"></select>
+    </div>
+    <div class="control-group ctrl-a">
+        <label id="lblDateA">🔵 Seçenek A: Tarih & Saat (UTC)</label>
+        <div class="datetime-row">
+            <input type="date" id="dateA" value="2026-11-15">
+            <input type="time" id="timeA" value="06:00">
+        </div>
+    </div>
+    <div class="control-group">
+        <label id="lblDuration">⏱️ Görev Süresi</label>
+        <select id="duration">
+            <option value="7" id="optDur7">7 Dünya Günü</option>
+            <option value="14" id="optDur14" selected>14 Dünya Günü (1 Ay Gündüzü)</option>
+            <option value="28" id="optDur28">28 Dünya Günü (Tam Döngü)</option>
+        </select>
+    </div>
+    <div class="control-group ctrl-b">
+        <label id="lblSiteB">🟠 Seçenek B: Alternatif Bölge</label>
+        <select id="siteB"></select>
+    </div>
+    <div class="control-group ctrl-b">
+        <label id="lblDateB">🟠 Seçenek B: Tarih & Saat (UTC)</label>
+        <div class="datetime-row">
+            <input type="date" id="dateB" value="2026-11-22">
+            <input type="time" id="timeB" value="06:00">
+        </div>
+    </div>
+    <button class="primary-btn" id="btnRunSim" onclick="runSimulation()">Simülasyonu Güncelle</button>
+</div>
+
+<div class="custom-coord-bar" id="customCoordBar">
+    <div class="control-group">
+        <label id="lblCustomLat">Özel Enlem (-80.1° ile -89.9° Güney)</label>
+        <input type="number" id="customLat" step="0.05" min="-89.95" max="-80.10" value="-88.50">
+    </div>
+    <div class="control-group">
+        <label id="lblCustomLon">Özel Boylam (0° ile 360° Doğu)</label>
+        <input type="number" id="customLon" step="0.1" min="0" max="360" value="145.00">
+    </div>
+    <div id="lblCustomTip" style="font-size:0.82rem; color:#bae6fd; padding-bottom:6px;">
+        İpucu: Sol 3D harita yüzeyinde herhangi bir noktaya tıklayarak da özel koordinat seçebilirsiniz.
+    </div>
+</div>
+
+<!-- 4 EKRANLI (SEKMELİ) FERAH GEZİNME BARI -->
+<nav class="page-nav-bar" id="mainPageNav">
+    <button type="button" class="page-tab-btn active" id="tabBtnOverview" onclick="switchPage('overview')">
+        <span>🌍 1. 3D Simülasyon & Özet</span>
+        <span class="page-tab-badge" id="tabBadgeScore">--</span>
+    </button>
+    <button type="button" class="page-tab-btn" id="tabBtnTimeline" onclick="switchPage('timeline')">
+        <span>📈 2. Saatlik Enerji & İletişim Takvimi</span>
+    </button>
+    <button type="button" class="page-tab-btn" id="tabBtnCompare" onclick="switchPage('compare')">
+        <span>⚖️ 3. A vs. B Karşılaştırma Tablosu</span>
+        <span class="page-tab-badge" id="tabBadgeWinner">A vs B</span>
+    </button>
+    <button type="button" class="page-tab-btn" id="tabBtnAi" onclick="switchPage('ai')">
+        <span>🤖 4. LUNA Yapay Zeka Raporu</span>
+    </button>
+</nav>
+
+<!-- EKRAN 1: 3D SİMÜLASYON & GENEL BAKIŞ -->
+<section class="page-section active" id="pageOverview">
+    <div class="summary-banner" id="summaryBanner"></div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="split-grid">
+        <div class="chart-box">
+            <div class="chart-header" style="flex-wrap:nowrap; align-items:center;">
+                <div style="flex:1; min-width:0;">
+                    <h3 id="mapBoxTitle">Gerçek 3D Ay Güney Kutbu Topografya & Krater Haritası</h3>
+                    <p id="mapBoxSub">Hazır görev noktalarına veya <strong>yüzeydeki herhangi bir özel noktaya</strong> tıklayarak LOLA analizi yapın.</p>
+                </div>
+                <button class="map-ctrl-btn" id="btnMapOrbit" onclick="toggleMapTurntable()" style="flex-shrink:0;">🔄 360° Tur</button>
+            </div>
+            <div class="map-viewport" id="mapViewportWrap" style="height: 390px;">
+                <div class="hud-overlay">
+                    <div class="hud-badge" id="mapHudSiteA" style="border-color:rgba(56,189,248,0.45); color:#e2e8f0;">🔵 A: Yükleniyor...</div>
+                    <div class="hud-badge" id="mapHudSiteB" style="border-color:rgba(251,146,60,0.45); color:#e2e8f0;">🟠 B: Yükleniyor...</div>
+                </div>
+                <div id="lunar3dMap" style="width:100%; height:100%;"></div>
+                <div class="hud-legend" id="mapLegendBar" style="right:12px; justify-content:space-between;">
+                    <span><b style="color:#38bdf8;">●</b> <span id="mapLegA">Seçenek A</span></span>
+                    <span><b style="color:#fb923c;">●</b> <span id="mapLegB">Seçenek B</span></span>
+                    <span><b style="color:#facc15;">●</b> <span id="mapLegCand">Aday Bölge</span></span>
+                    <span><b style="color:#06b6d4;">◆</b> <span id="mapLegPsr">PSR Su Buzu (40K)</span></span>
+                    <span id="mapHudDist" style="color:#94a3b8;"></span>
+                </div>
+            </div>
+            <div class="map-ctrl-bar">
+                <div class="map-ctrl-group">
+                    <button class="map-ctrl-btn active" id="btnThemeRegolith" onclick="setMapTheme('regolith')">🌕 Gerçekçi Ay</button>
+                    <button class="map-ctrl-btn" id="btnThemeTopo" onclick="setMapTheme('topo')">🌈 NASA Topo (DEM)</button>
+                    <button class="map-ctrl-btn" id="btnThemeIce" onclick="setMapTheme('ice')">❄️ PSR Buz & Termal</button>
+                </div>
+                <div class="map-ctrl-group">
+                    <button class="map-ctrl-btn" id="btnCamIso" onclick="setMapCamera('iso')">📐 3D Açı</button>
+                    <button class="map-ctrl-btn" id="btnCamTop" onclick="setMapCamera('top')">🛰️ Üstten</button>
+                    <button class="map-ctrl-btn" id="btnCamLow" onclick="setMapCamera('low')">🏔️ Ufuk</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-box">
+            <div class="chart-header" style="flex-wrap:nowrap; align-items:center;">
+                <div style="flex:1; min-width:0;">
+                    <h3 id="simBoxTitle">3D Uzay & Krater Ufuk Simülasyonu (WebGL)</h3>
+                    <p id="simBoxSub">Fareyle <strong>360° çevirin</strong>, tekerlekle yakınlaşın: Gerçek LOLA krater dağları, Güneş ışığı ve Dünya lazer hattını izleyin.</p>
+                </div>
+                <div style="display:flex; gap:6px; flex-shrink:0; align-self:center;">
+                    <button class="map-ctrl-btn" id="btnSimLander" onclick="SpaceSim.focusLander()" title="İniş Aracına Yakınlaş">🤖 İniş Aracı</button>
+                    <button class="anim-btn" id="viewBtn" onclick="SpaceSim.toggleView()" style="padding:6px 11px; font-size:0.76rem; background:#1e293b; color:#e2e8f0; border:1px solid #334155; white-space:nowrap;">👁 Astronot Görünümü</button>
+                </div>
+            </div>
+            <div class="space-viewport" id="spaceViewport" style="height: 390px;">
+                <div class="hud-overlay" style="flex-wrap:wrap; gap:6px;">
+                    <div class="hud-badge" id="hudSunStatus">☀️ Güneş Durumu</div>
+                    <div class="hud-badge" id="hudEarthStatus">🌍 Dünya Bağlantısı</div>
+                </div>
+                <div class="hud-badge" id="hudThermalBadge" style="position:absolute; bottom:40px; right:12px; z-index:5; pointer-events:none; font-size:0.72rem; background:rgba(9,13,22,0.82); border-color:rgba(56,189,248,0.32);">
+                    🌡️ Yüzey: --°C | ⚡ Panel: -- kW
+                </div>
+                <div class="hud-legend" style="right:12px; justify-content:space-between;">
+                    <span id="legSun"><b style="color:#facc15;">●</b> Güneş Yörüngesi</span>
+                    <span id="legEarth"><b style="color:#4ade80;">●</b> Dünya Yörüngesi</span>
+                    <span id="legBeam"><b style="color:#38bdf8;">---</b> Telemetri Işını</span>
+                    <span id="hudScale" style="color:#94a3b8;"></span>
+                </div>
+            </div>
+            <div class="anim-bar">
+                <button class="anim-btn" id="playBtn" onclick="togglePlay()">▶ Oynat</button>
+                <div style="display:flex; gap:4px;">
+                    <button class="map-ctrl-btn active" id="spd1x" onclick="setAnimSpeed(1)" style="padding:4px 7px; font-size:0.71rem;">1x</button>
+                    <button class="map-ctrl-btn" id="spd2x" onclick="setAnimSpeed(2)" style="padding:4px 7px; font-size:0.71rem;">2x</button>
+                    <button class="map-ctrl-btn" id="spd4x" onclick="setAnimSpeed(4)" style="padding:4px 7px; font-size:0.71rem;">4x</button>
+                </div>
+                <input type="range" class="anim-slider" id="timeSlider" min="0" max="335" value="0" oninput="onSliderMove(this.value)">
+                <span class="anim-label" id="animTimeLabel">Saat 0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-footer-nav">
+        <span style="font-size:0.82rem; color:var(--muted);">💡 İpucu: Sol 3D haritada istediğiniz noktaya tıklayarak özel koordinat seçebilirsiniz.</span>
+        <button type="button" class="page-next-btn" onclick="switchPage('timeline')">📈 2. Saatlik Enerji & İletişim Takvimine Geç ➔</button>
+    </div>
+</section>
+
+<!-- EKRAN 2: SAATLİK ENERJİ VE İLETİŞİM TAKVİMİ -->
+<section class="page-section" id="pageTimeline">
+    <div class="chart-box">
+        <div class="chart-header">
+            <div>
+                <h3 id="tlBoxTitle">Görev Boyunca Enerji ve İletişim Takvimi</h3>
+                <p id="tlBoxSub">Üstte <strong>Güneş Şarjı, Dünya Bağlantısı ve Görev Modu</strong> şeritleri; altta ise <strong>Güneş/Dünya yükselme açısı ile krater ufuk engeli (°)</strong> gösterilir. Herhangi bir saate tıklayarak 3D simülasyonu o ana getirebilirsiniz.</p>
+            </div>
+            <button class="anim-btn" id="csvBtn" onclick="exportCSV()" style="background:#1e293b; color:#38bdf8; border:1px solid #334155;">⬇ CSV Telemetri İndir</button>
+        </div>
+        <div id="timelineLegendBar" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:12px; margin-bottom:14px;"></div>
+        <div id="timelineChart" style="height: 380px;"></div>
+    </div>
+
+    <div class="page-footer-nav">
+        <button type="button" class="page-next-btn" onclick="switchPage('overview')">⬅ 🌍 1. 3D Simülasyon Ekranına Dön</button>
+        <button type="button" class="page-next-btn" onclick="switchPage('compare')">⚖️ 3. A vs. B Karşılaştırma Tablosuna Geç ➔</button>
+    </div>
+</section>
+
+<!-- EKRAN 3: A VS. B HIZLI KARAR KARŞILAŞTIRMASI TABLOSU -->
+<section class="page-section" id="pageCompare">
+    <div class="chart-box">
+        <div class="chart-header">
+            <div>
+                <h3 id="cmpBoxTitle">İki Seçenek Arasında Hızlı Karar Karşılaştırması</h3>
+                <p id="cmpBoxSub">Bölge, tarih veya saat değişikliğinin görevin uygulanabilirliğine etkisini ve kazanan metrikleri yan yana kıyaslayın.</p>
+            </div>
+        </div>
+        <table class="compare-table" id="compareTable"></table>
+    </div>
+
+    <div class="page-footer-nav">
+        <button type="button" class="page-next-btn" onclick="switchPage('timeline')">⬅ 📈 2. Saatlik Takvime Dön</button>
+        <button type="button" class="page-next-btn" onclick="switchPage('ai')">🤖 4. LUNA Yapay Zeka Raporuna Geç ➔</button>
+    </div>
+</section>
+
+<!-- EKRAN 4: LUNA YAPAY ZEKA RAPORU & MÜHENDİSLİK ANALİZİ -->
+<section class="page-section" id="pageAi">
+    <div class="chart-box">
+        <div class="chart-header">
+            <div>
+                <h3>🤖 LUNA Yapay Zeka Karşılaştırma & Mühendislik Raporu</h3>
+                <p>Google Gemini AI ve yerleşik fiziksel karar motoru tarafından üretilen 5 boyutlu görev değerlendirmesi.</p>
+            </div>
+            <button type="button" class="page-next-btn" onclick="toggleMascotBubble()">💬 LUNA'ya Soru Sor</button>
+        </div>
+        <div class="ai-summary-card" id="tableAiSummary" style="margin-top:4px;">Analiz yükleniyor...</div>
+    </div>
+
+    <div class="page-footer-nav">
+        <button type="button" class="page-next-btn" onclick="switchPage('compare')">⬅ ⚖️ 3. Karşılaştırma Tablosuna Dön</button>
+        <button type="button" class="page-next-btn" onclick="switchPage('overview')">🌍 1. 3D Simülasyon Ekranına Dön</button>
+    </div>
+</section>
+
+<div class="mascot-widget" id="mascotWidget">
+    <div class="mascot-bubble" id="mascotBubble">
+        <div class="mascot-header">
+            <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+                <span id="mascotHdrTitle" style="font-weight:700; font-size:0.82rem; color:#38bdf8;">🤖 LUNA — AI Görev Maskotu</span>
+                <span id="mascotSourceBadge" style="font-size:0.68rem; color:#94a3b8; background:#1e293b; padding:2px 6px; border-radius:999px;">Hazır</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+                <input type="file" id="mascotFileInput" accept="image/*" style="display:none;" onchange="onMascotFileChange(event)">
+                <button class="mascot-head-btn" id="btnPickMascot" onclick="document.getElementById('mascotFileInput').click()" title="Kendi PNG/SVG maskot görselini yükle">🖼️ Maskot Seç</button>
+                <button class="mascot-head-btn" onclick="refreshMascotAI()" title="Gemini AI yorumunu yenile">🔄</button>
+                <button class="mascot-head-btn" onclick="toggleMascotBubble()" title="Küçült / Kapat">✕</button>
+            </div>
+        </div>
+        <div class="mascot-body" id="mascotCommentBody">Seçenekler analiz ediliyor...</div>
+        <div class="mascot-ask-bar">
+            <input type="text" id="mascotAskInput" placeholder="LUNA'ya sor: Örn. Neden B daha güvenli?" onkeydown="if(event.key==='Enter') askMascotQuestion()">
+            <button id="btnAskMascot" onclick="askMascotQuestion()">Sor</button>
+        </div>
+    </div>
+    <div class="mascot-bottom-row">
+        <div class="mascot-quick-pill" id="mascotQuickPill" onclick="toggleMascotBubble()" title="LUNA AI Analiz & Soru-Cevap Penceresini Aç/Kapat">
+            💬 LUNA AI Analizi & Soru Sor
+        </div>
+        <button class="mascot-avatar-btn" id="mascotAvatarBtn" onclick="toggleMascotBubble()" title="LUNA AI Görev Analisti">
+            <img id="mascotCustomImg" alt="Özel Maskot">
+            <svg id="mascotDefaultSvg" viewBox="0 0 64 64" width="52" height="52" aria-hidden="true">
+                <circle cx="32" cy="30" r="21" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/>
+                <rect x="17" y="18" width="30" height="19" rx="9" fill="#0f172a" stroke="#facc15" stroke-width="2"/>
+                <path d="M22 25 Q26 21 31 22" fill="none" stroke="#fde047" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+                <circle cx="26" cy="27" r="2.2" fill="#38bdf8"/>
+                <circle cx="38" cy="27" r="2.2" fill="#38bdf8"/>
+                <path d="M28 32 Q32 35 36 32" fill="none" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+                <rect x="20" y="49" width="24" height="10" rx="5" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+                <circle cx="32" cy="7" r="3" fill="#38bdf8"/>
+                <line x1="32" y1="9" x2="32" y2="12" stroke="#38bdf8" stroke-width="2"/>
+            </svg>
+        </button>
+    </div>
+</div>
+
+<script>
+    let REAL_TERRAIN = null;
+    let CURRENT_DATA_A = null;
+    let CURRENT_DATA_B = null;
+    let ANIM_TIMER = null;
+    let VIEW_MODE = 'eng';
+    let LANG = 'tr';
+    let ACTIVE_AI_CTRL = null;
+
+    // =========================================================================
+    // THREE.JS GERÇEKÇİ 3D UZAY & KRATER UFUK SİMÜLASYONU MOTORU
+    // =========================================================================
+    // ---- Prosedürel doku & gürültü yardımcıları (harici dosya gerektirmez) ----
+    const SimUtil = {
+        hash(ix, iy, iz, seed) {
+            let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263) ^ Math.imul(iz | 0, 1274126177) ^ Math.imul(seed | 0, 1442695041);
+            h = Math.imul(h ^ (h >>> 13), 1103515245);
+            h ^= h >>> 16;
+            return (h >>> 0) / 4294967295;
+        },
+        fade(t) { return t * t * (3 - 2 * t); },
+        noise2(x, y, seed, period) {
+            const xi = Math.floor(x), yi = Math.floor(y);
+            const fx = this.fade(x - xi), fy = this.fade(y - yi);
+            const w = period ? (v) => ((v % period) + period) % period : (v) => v;
+            const x0 = w(xi), x1 = w(xi + 1), y0 = w(yi), y1 = w(yi + 1);
+            const a = this.hash(x0, y0, 0, seed), b = this.hash(x1, y0, 0, seed);
+            const c = this.hash(x0, y1, 0, seed), d = this.hash(x1, y1, 0, seed);
+            const ab = a + (b - a) * fx, cd = c + (d - c) * fx;
+            return ab + (cd - ab) * fy;
+        },
+        fbm2(x, y, seed, oct, period) {
+            let s = 0, amp = 0.5, f = 1, norm = 0;
+            for (let i = 0; i < oct; i++) {
+                s += amp * this.noise2(x * f, y * f, seed + i * 31, period ? period * f : 0);
+                norm += amp; amp *= 0.5; f *= 2;
+            }
+            return s / norm;
+        },
+        noise3(x, y, z, seed) {
+            const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+            const fx = this.fade(x - xi), fy = this.fade(y - yi), fz = this.fade(z - zi);
+            const h = (i, j, k) => this.hash(xi + i, yi + j, zi + k, seed);
+            const l = (a, b, t) => a + (b - a) * t;
+            return l(
+                l(l(h(0, 0, 0), h(1, 0, 0), fx), l(h(0, 1, 0), h(1, 1, 0), fx), fy),
+                l(l(h(0, 0, 1), h(1, 0, 1), fx), l(h(0, 1, 1), h(1, 1, 1), fx), fy), fz);
+        },
+        fbm3(x, y, z, seed, oct) {
+            let s = 0, amp = 0.5, f = 1, norm = 0;
+            for (let i = 0; i < oct; i++) {
+                s += amp * this.noise3(x * f, y * f, z * f, seed + i * 31);
+                norm += amp; amp *= 0.5; f *= 2;
+            }
+            return s / norm;
+        },
+        rng(seed) {
+            let s = seed | 0;
+            return function () {
+                s = (s + 0x6D2B79F5) | 0;
+                let t = Math.imul(s ^ (s >>> 15), 1 | s);
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        },
+        canvasTex(canvas, repeat) {
+            const t = new THREE.CanvasTexture(canvas);
+            if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
+            t.anisotropy = 4;
+            return t;
+        },
+        glowTexture(stops, size) {
+            size = size || 128;
+            const c = document.createElement('canvas'); c.width = c.height = size;
+            const ctx = c.getContext('2d');
+            const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+            stops.forEach(([o, col]) => g.addColorStop(o, col));
+            ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+            return new THREE.CanvasTexture(c);
+        }
+    };
+
+    // =========================================================================
+    // KONUMA ÖZGÜ GERÇEKÇİ 3D LOLA TOPOGRAFYA DİORAMASI & YÖRÜNGE SİMÜLASYONU (v5)
+    // - Seçilen veya haritada tıklanan koordinatın gerçek LOLA DEM kesitini (±18 km)
+    //   anlık 3D yüksekliğe, krater çukuruna veya dağ sırtına dönüştürür
+    // - Derin PSR kraterleri koyu gölgeli çanak, yüksek zirveler açık güneşli tepe olur
+    // - Jeolojik yan kesit kaidesi + fiziksel krater gölgelemesi (Shadow Map)
+    // - Güneş ve Dünya yörüngeleri arazi diskinin tamamen dışında konumlanır
+    // =========================================================================
+    const SpaceSim = {
+        scene: null, camera: null, renderer: null, controls: null, clock: null,
+        terrainGroup: null, orbitGroup: null, lander: null, padLight: null,
+        sunGroup: null, sunCore: null, sunGlowA: null, sunGlowB: null, sunFlare: null,
+        sunLight: null, hemiLight: null,
+        earthGroup: null, earthMesh: null, earthMat: null, earthshine: null,
+        commBeam: null, packets: [], dishGroup: null, panelGroup: null, beacon: null,
+        tex: {}, tctx: null,
+        initialized: false, fpv: false, savedCam: null, beamVisible: false,
+        R_OUTER: 9.2, R_EARTH: 13.5, R_SUN: 15.8, EYE: 0.72, yLander: 0,
+
+        init() {
+            if (this.initialized) return;
+            const container = document.getElementById('spaceViewport');
+            const w = container.clientWidth || 640, h = container.clientHeight || 365;
+
+            this.clock = new THREE.Clock();
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x02040a);
+
+            this.camera = new THREE.PerspectiveCamera(44, w / h, 0.05, 3000);
+            this.camera.position.set(13.8, 7.6, 16.5);
+
+            this.renderer = new THREE.WebGLRenderer({ antialias: true });
+            this.renderer.setSize(w, h);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.shadowMap.enabled = true;
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            this.renderer.toneMappingExposure = 1.12;
+            container.appendChild(this.renderer.domElement);
+
+            this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+            this.controls.enableDamping = true;
+            this.controls.dampingFactor = 0.06;
+            this.controls.maxPolarAngle = Math.PI * 0.85;
+            this.controls.minDistance = 2.6;
+            this.controls.maxDistance = 38;
+            this.controls.target.set(0, 0.35, 0);
+
+            this.buildTextures();
+            this.buildStars();
+
+            // Uzay aydınlatması: Güneş + gökyüzü/zemin dolgu + earthshine + iniş pedi çalışma ışığı
+            this.hemiLight = new THREE.HemisphereLight(0x8fa8d6, 0x161c28, 0.46);
+            this.scene.add(this.hemiLight);
+
+            this.earthshine = new THREE.DirectionalLight(0x88b4ff, 0.24);
+            this.scene.add(this.earthshine);
+
+            this.padLight = new THREE.PointLight(0x38bdf8, 0.45, 4.0);
+            this.padLight.position.set(0, 0.9, 0);
+            this.scene.add(this.padLight);
+
+            this.sunLight = new THREE.DirectionalLight(0xfff5e4, 2.5);
+            this.sunLight.castShadow = true;
+            const sh = this.sunLight.shadow;
+            sh.mapSize.set(2048, 2048);
+            sh.camera.left = -10.5; sh.camera.right = 10.5;
+            sh.camera.top = 10.5; sh.camera.bottom = -10.5;
+            sh.camera.near = 1; sh.camera.far = 55;
+            sh.bias = -0.0005;
+            if ('normalBias' in sh) sh.normalBias = 0.028;
+            this.scene.add(this.sunLight);
+            this.scene.add(this.sunLight.target);
+            this.sunLight.target.position.set(0, 0, 0);
+
+            this.buildSun();
+            this.buildEarth();
+            this.buildLander();
+            this.buildBeam();
+
+            this.terrainGroup = new THREE.Group();
+            this.orbitGroup = new THREE.Group();
+            this.scene.add(this.terrainGroup);
+            this.scene.add(this.orbitGroup);
+
+            window.addEventListener('resize', () => {
+                const nw = container.clientWidth, nh = container.clientHeight;
+                if (!nw || !nh) return;
+                this.camera.aspect = nw / nh;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(nw, nh);
+            });
+
+            this.initialized = true;
+            this.animate();
+        },
+
+        // ---------------------------------------------------------------- Dokular
+        buildTextures() {
+            const U = SimUtil;
+
+            // 1) İnce taneli + çok ölçekli mikro-kraterli Ay regolit dokusu (dikişsiz karo)
+            const S = 512, rc = document.createElement('canvas'); rc.width = rc.height = S;
+            const rctx = rc.getContext('2d'); const rimg = rctx.createImageData(S, S);
+            const regField = new Float32Array(S * S);
+            for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+                const u = x / S * 8, v = y / S * 8;
+                const fine = U.fbm2(u * 2, v * 2, 13, 4, 16);
+                const grain = U.noise2(u * 8, v * 8, 37, 64);
+                regField[y * S + x] = 0.68 + Math.max(0, Math.min(1, fine * 0.65 + grain * 0.35)) * 0.22;
+            }
+            const texRnd = U.rng(771);
+            for (let k = 0; k < 110; k++) {
+                const cx = texRnd() * S, cy = texRnd() * S;
+                const rPx = 3 + Math.pow(texRnd(), 2.3) * 26;
+                const depth = 0.08 + texRnd() * 0.14;
+                const radMax = Math.ceil(rPx * 1.55);
+                for (let dy = -radMax; dy <= radMax; dy++) {
+                    const py = ((Math.round(cy) + dy) % S + S) % S;
+                    for (let dx = -radMax; dx <= radMax; dx++) {
+                        const d = Math.hypot(dx, dy);
+                        const dn = d / rPx;
+                        if (dn > 1.55) continue;
+                        const px = ((Math.round(cx) + dx) % S + S) % S;
+                        let delta = 0;
+                        if (dn < 1.0) delta -= depth * Math.pow(1.0 - dn * dn, 1.3);
+                        delta += depth * 0.45 * Math.exp(-Math.pow((dn - 1.0) / 0.22, 2));
+                        regField[py * S + px] += delta;
+                    }
+                }
+            }
+            for (let idx = 0; idx < S * S; idx++) {
+                const val = Math.max(0.24, Math.min(0.98, regField[idx])) * 255;
+                const i = idx * 4;
+                rimg.data[i] = val;
+                rimg.data[i + 1] = val * 0.99;
+                rimg.data[i + 2] = val * 0.97;
+                rimg.data[i + 3] = 255;
+            }
+            rctx.putImageData(rimg, 0, 0);
+            this.tex.regolith = U.canvasTex(rc, true);
+
+            // 2) Altın termal folyo (MLI)
+            const fc = document.createElement('canvas'); fc.width = fc.height = 256;
+            const fctx = fc.getContext('2d'); const fimg = fctx.createImageData(256, 256);
+            for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+                const n = U.fbm2(x / 256 * 6, y / 256 * 6, 5, 4, 6), c = U.noise2(x / 256 * 40, y / 256 * 3, 9, 0);
+                const val = Math.max(0, Math.min(1, 0.62 + (n - 0.5) * 1.0 + (c - 0.5) * 0.22)) * 255;
+                const i = (y * 256 + x) * 4;
+                fimg.data[i] = val; fimg.data[i + 1] = val; fimg.data[i + 2] = val; fimg.data[i + 3] = 255;
+            }
+            fctx.putImageData(fimg, 0, 0);
+            this.tex.foil = U.canvasTex(fc, true);
+
+            // 3) Güneş paneli hücreleri
+            const pc = document.createElement('canvas'); pc.width = 256; pc.height = 144;
+            const pctx = pc.getContext('2d');
+            pctx.fillStyle = '#9aa7ba'; pctx.fillRect(0, 0, 256, 144);
+            const cols = 8, rows = 4, gap = 3, cw = (256 - gap * (cols + 1)) / cols, ch = (144 - gap * (rows + 1)) / rows;
+            for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+                const x = gap + c * (cw + gap), y = gap + r * (ch + gap);
+                const g = pctx.createLinearGradient(x, y, x + cw, y + ch);
+                g.addColorStop(0, '#1d3a7a'); g.addColorStop(0.5, '#0c1d45'); g.addColorStop(1, '#16306a');
+                pctx.fillStyle = g; pctx.fillRect(x, y, cw, ch);
+                pctx.strokeStyle = 'rgba(160,180,220,0.25)'; pctx.lineWidth = 1;
+                for (let k = 1; k < 4; k++) { pctx.beginPath(); pctx.moveTo(x, y + ch * k / 4); pctx.lineTo(x + cw, y + ch * k / 4); pctx.stroke(); }
+            }
+            this.tex.panel = U.canvasTex(pc, false);
+
+            // 4) Dünya haritası & bulutlar
+            const EW = 512, EH = 256;
+            const dc = document.createElement('canvas'); dc.width = EW; dc.height = EH;
+            const cc = document.createElement('canvas'); cc.width = EW; cc.height = EH;
+            const dctx = dc.getContext('2d'), cctx = cc.getContext('2d');
+            const di = dctx.createImageData(EW, EH), ci = cctx.createImageData(EW, EH);
+            for (let y = 0; y < EH; y++) {
+                const lat = (0.5 - (y + 0.5) / EH) * Math.PI, cl = Math.cos(lat), sl = Math.sin(lat);
+                const absLat = Math.abs(lat) * 180 / Math.PI;
+                for (let x = 0; x < EW; x++) {
+                    const lon = (x + 0.5) / EW * Math.PI * 2;
+                    const px = cl * Math.cos(lon), py = sl, pz = cl * Math.sin(lon);
+                    const n = U.fbm3(px * 1.7 + 5, py * 1.7 + 5, pz * 1.7 + 5, 3, 5);
+                    const m = U.fbm3(px * 4 + 9, py * 4 + 9, pz * 4 + 9, 8, 3);
+                    let r, g, b;
+                    if (n > 0.535) {
+                        const hh = Math.min(1, (n - 0.535) / 0.2);
+                        if (absLat < 32 && m > 0.52) { r = 190 + hh * 20; g = 160 + hh * 10; b = 105; }
+                        else { r = 48 + m * 50 + hh * 50; g = 92 + m * 45 + hh * 20; b = 42 + hh * 25; }
+                    } else {
+                        const d = Math.min(1, (0.535 - n) / 0.18);
+                        r = 18 + (1 - d) * 30; g = 52 + (1 - d) * 70; b = 112 + (1 - d) * 60;
+                    }
+                    if (absLat > 70 + m * 8) { r = 236; g = 240; b = 245; }
+                    const i = (y * EW + x) * 4;
+                    di.data[i] = r; di.data[i + 1] = g; di.data[i + 2] = b; di.data[i + 3] = 255;
+                    const c = U.fbm3(px * 2.6 + 30, py * 5.2 + 30, pz * 2.6 + 30, 21, 5);
+                    const cv = Math.max(0, Math.min(1, (c - 0.5) / 0.2)) * 255;
+                    ci.data[i] = cv; ci.data[i + 1] = cv; ci.data[i + 2] = cv; ci.data[i + 3] = 255;
+                }
+            }
+            dctx.putImageData(di, 0, 0); cctx.putImageData(ci, 0, 0);
+            this.tex.earthDay = U.canvasTex(dc, false);
+            this.tex.earthClouds = U.canvasTex(cc, true);
+
+            // 5) Işıma & hale dokuları
+            this.tex.dot = U.glowTexture([[0, 'rgba(255,255,255,1)'], [0.35, 'rgba(255,255,255,0.6)'], [1, 'rgba(255,255,255,0)']], 64);
+            this.tex.sunInner = U.glowTexture([[0, 'rgba(255,255,250,1)'], [0.22, 'rgba(255,244,214,0.9)'], [0.48, 'rgba(255,214,130,0.34)'], [1, 'rgba(255,190,90,0)']], 256);
+            this.tex.sunOuter = U.glowTexture([[0, 'rgba(255,220,150,0.34)'], [0.42, 'rgba(255,190,110,0.10)'], [1, 'rgba(255,170,80,0)']], 256);
+            this.tex.atmo = U.glowTexture([[0, 'rgba(120,180,255,0)'], [0.66, 'rgba(120,180,255,0)'], [0.72, 'rgba(130,190,255,0.55)'], [0.85, 'rgba(90,150,255,0.16)'], [1, 'rgba(60,120,255,0)']], 256);
+            this.tex.packet = U.glowTexture([[0, 'rgba(210,255,225,1)'], [0.3, 'rgba(74,222,128,0.85)'], [1, 'rgba(74,222,128,0)']], 64);
+            this.tex.blast = U.glowTexture([[0, 'rgba(12,14,18,0.42)'], [0.55, 'rgba(18,20,25,0.16)'], [1, 'rgba(0,0,0,0)']], 256);
+
+            const sf = document.createElement('canvas'); sf.width = sf.height = 256;
+            const sfx = sf.getContext('2d'); sfx.translate(128, 128); sfx.globalCompositeOperation = 'lighter';
+            for (let k = 0; k < 12; k++) {
+                const ang = k * Math.PI / 6 + (k % 2 ? 0.12 : 0), len = k % 3 === 0 ? 128 : 80;
+                const g = sfx.createLinearGradient(0, 0, Math.cos(ang) * len, Math.sin(ang) * len);
+                g.addColorStop(0, 'rgba(255,240,200,0.6)'); g.addColorStop(1, 'rgba(255,220,150,0)');
+                sfx.strokeStyle = g; sfx.lineWidth = k % 3 === 0 ? 3 : 1.5;
+                sfx.beginPath(); sfx.moveTo(0, 0); sfx.lineTo(Math.cos(ang) * len, Math.sin(ang) * len); sfx.stroke();
+            }
+            this.tex.flare = U.canvasTex(sf, false);
+        },
+
+        // ---------------------------------------------------------------- Yıldızlar + Samanyolu
+        buildStars() {
+            const rnd = SimUtil.rng(4242);
+            const R = 900;
+            const mk = (n, size, opacity, gen) => {
+                const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+                for (let i = 0; i < n; i++) {
+                    const s = gen();
+                    pos[i * 3] = s.v.x * R; pos[i * 3 + 1] = s.v.y * R; pos[i * 3 + 2] = s.v.z * R;
+                    col[i * 3] = s.c[0]; col[i * 3 + 1] = s.c[1]; col[i * 3 + 2] = s.c[2];
+                }
+                const g = new THREE.BufferGeometry();
+                g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+                g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+                const m = new THREE.PointsMaterial({ size, sizeAttenuation: false, map: this.tex.dot, vertexColors: true, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending });
+                this.scene.add(new THREE.Points(g, m));
+            };
+            const randDir = () => { const u = rnd() * 2 - 1, t = rnd() * Math.PI * 2, s = Math.sqrt(1 - u * u); return new THREE.Vector3(s * Math.cos(t), u, s * Math.sin(t)); };
+            const tints = [[1, 1, 1], [0.75, 0.85, 1], [1, 0.92, 0.78], [1, 0.8, 0.65], [0.85, 0.9, 1]];
+            mk(2800, 2.2, 0.8, () => { const b = 0.35 + rnd() * 0.65, t = tints[Math.floor(rnd() * tints.length)]; return { v: randDir(), c: [t[0] * b, t[1] * b, t[2] * b] }; });
+            mk(260, 4.2, 0.95, () => ({ v: randDir(), c: tints[Math.floor(rnd() * tints.length)] }));
+            const tilt = new THREE.Euler(1.05, 0.3, 0.45);
+            mk(4500, 1.8, 0.3, () => {
+                const a = rnd() * Math.PI * 2, g = (rnd() + rnd() + rnd() - 1.5) * 0.16;
+                const v = new THREE.Vector3(Math.cos(a), g, Math.sin(a)).normalize().applyEuler(tilt);
+                const b = 0.25 + rnd() * 0.45;
+                return { v, c: [b * 0.85, b * 0.9, b] };
+            });
+        },
+
+        // ---------------------------------------------------------------- Güneş (diorama dış yörüngesi)
+        buildSun() {
+            this.sunGroup = new THREE.Group();
+            this.sunCore = new THREE.Mesh(new THREE.SphereGeometry(0.68, 28, 28), new THREE.MeshBasicMaterial({ color: 0xfffbea }));
+            const mkSprite = (tex, scale, opacity) => {
+                const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
+                s.scale.set(scale, scale, 1); return s;
+            };
+            this.sunGlowA = mkSprite(this.tex.sunInner, 4.2, 1.0);
+            this.sunGlowB = mkSprite(this.tex.sunOuter, 9.8, 0.85);
+            this.sunFlare = mkSprite(this.tex.flare, 7.2, 0.7);
+            this.sunGroup.add(this.sunCore, this.sunGlowA, this.sunGlowB, this.sunFlare);
+            this.scene.add(this.sunGroup);
+        },
+
+        // ---------------------------------------------------------------- Dünya (diorama dış yörüngesi + evre)
+        buildEarth() {
+            this.earthGroup = new THREE.Group();
+            const tilt = new THREE.Group(); tilt.rotation.z = THREE.MathUtils.degToRad(23.4);
+            this.earthMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    dayMap: { value: this.tex.earthDay },
+                    cloudMap: { value: this.tex.earthClouds },
+                    sunDir: { value: new THREE.Vector3(1, 0, 0) },
+                    cloudShift: { value: 0 }
+                },
+                vertexShader: `
+                    varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+                    void main() {
+                        vUv = uv;
+                        vN = normalize(mat3(modelMatrix) * normal);
+                        vec4 wp = modelMatrix * vec4(position, 1.0);
+                        vV = normalize(cameraPosition - wp.xyz);
+                        gl_Position = projectionMatrix * viewMatrix * wp;
+                    }`,
+                fragmentShader: `
+                    uniform sampler2D dayMap; uniform sampler2D cloudMap; uniform vec3 sunDir; uniform float cloudShift;
+                    varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+                    void main() {
+                        vec3 n = normalize(vN);
+                        float d = dot(n, normalize(sunDir));
+                        float light = smoothstep(-0.12, 0.35, d);
+                        vec3 day = texture2D(dayMap, vUv).rgb;
+                        float cl = texture2D(cloudMap, vec2(vUv.x + cloudShift, vUv.y)).r;
+                        day = mix(day, vec3(1.0), cl * 0.82);
+                        vec3 night = vec3(0.02, 0.03, 0.06) + day * 0.16;
+                        vec3 col = mix(night, day * 1.25, light);
+                        float rim = pow(1.0 - max(dot(n, normalize(vV)), 0.0), 2.4);
+                        col += vec3(0.32, 0.58, 1.0) * rim * (0.25 + 0.85 * light);
+                        gl_FragColor = vec4(col, 1.0);
+                    }`
+            });
+            this.earthMesh = new THREE.Mesh(new THREE.SphereGeometry(0.78, 40, 40), this.earthMat);
+            tilt.add(this.earthMesh);
+            const atmo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.atmo, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false }));
+            atmo.scale.set(2.1, 2.1, 1);
+            this.earthGroup.add(tilt, atmo);
+            this.scene.add(this.earthGroup);
+        },
+
+        strut(p1, p2, radius, mat) {
+            const dir = new THREE.Vector3().subVectors(p2, p1), len = dir.length();
+            const m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 8), mat);
+            m.position.copy(p1).add(p2).multiplyScalar(0.5);
+            m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+            m.castShadow = true;
+            return m;
+        },
+
+        // ---------------------------------------------------------------- İniş aracı (araziyle orantılı gerçekçi ölçek)
+        buildLander() {
+            const L = new THREE.Group();
+            const gold = new THREE.MeshStandardMaterial({ color: 0xe6b650, map: this.tex.foil, bumpMap: this.tex.foil, bumpScale: 0.015, metalness: 0.88, roughness: 0.30 });
+            const silver = new THREE.MeshStandardMaterial({ color: 0xd8dee8, metalness: 0.72, roughness: 0.28 });
+            const white = new THREE.MeshStandardMaterial({ color: 0xf4f6f9, metalness: 0.06, roughness: 0.55 });
+            const bellMat = new THREE.MeshStandardMaterial({ color: 0x333942, metalness: 0.6, roughness: 0.45, side: THREE.DoubleSide });
+            const add = (m) => { m.castShadow = true; m.receiveShadow = true; L.add(m); return m; };
+
+            add(new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.58, 8), gold)).position.y = 0.78;
+            add(new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.68, 0.05, 8), silver)).position.y = 1.09;
+            add(new THREE.Mesh(new THREE.CylinderGeometry(0.50, 0.56, 0.11, 8), silver)).position.y = 0.44;
+            add(new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, 0.26, 20, 1, true), bellMat)).position.y = 0.28;
+
+            [-0.30, 0.30].forEach(x => add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 12), white)).position.set(x, 1.26, 0.18));
+            add(new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.22, 0.26), white)).position.set(0, 1.23, -0.32);
+            add(this.strut(new THREE.Vector3(-0.44, 1.12, -0.24), new THREE.Vector3(-0.44, 1.60, -0.24), 0.018, silver));
+            add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.10), silver)).position.set(-0.44, 1.64, -0.24);
+
+            this.beacon = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 10), new THREE.MeshStandardMaterial({ color: 0xff3b3b, emissive: 0xff2020, emissiveIntensity: 1.8 }));
+            this.beacon.position.set(0.12, 1.38, -0.32);
+            L.add(this.beacon);
+
+            for (let i = 0; i < 4; i++) {
+                const a = i * Math.PI / 2 + Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
+                const top = new THREE.Vector3(c * 0.56, 0.72, s * 0.56);
+                const mid = new THREE.Vector3(c * 0.52, 0.44, s * 0.52);
+                const foot = new THREE.Vector3(c * 1.08, 0.06, s * 1.08);
+                add(this.strut(top, foot, 0.03, silver));
+                add(this.strut(mid, foot, 0.018, silver));
+                add(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.17, 0.04, 16), silver)).position.set(foot.x, 0.025, foot.z);
+            }
+
+            this.panelGroup = new THREE.Group(); this.panelGroup.position.set(0, 1.12, 0.16);
+            const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.96, 8), silver);
+            mast.position.y = 0.48; mast.castShadow = true;
+            const cellMat = new THREE.MeshStandardMaterial({ map: this.tex.panel, metalness: 0.5, roughness: 0.25, emissive: 0x0f2554, emissiveIntensity: 0.35 });
+            const backMat = new THREE.MeshStandardMaterial({ color: 0x94a0b2, metalness: 0.55, roughness: 0.45 });
+            const panel = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.84, 0.03), [backMat, backMat, backMat, backMat, cellMat, backMat]);
+            panel.position.set(0, 1.00, 0.05); panel.castShadow = true; panel.receiveShadow = true;
+            this.panelGroup.add(mast, panel);
+            L.add(this.panelGroup);
+
+            add(this.strut(new THREE.Vector3(0.42, 1.12, -0.12), new THREE.Vector3(0.42, 1.40, -0.12), 0.018, silver));
+            this.dishGroup = new THREE.Group(); this.dishGroup.position.set(0.42, 1.43, -0.12);
+            const pts = []; for (let k = 0; k <= 10; k++) { const r = 0.27 * k / 10; pts.push(new THREE.Vector2(r, r * r * 1.45)); }
+            const dishMesh = new THREE.Mesh(new THREE.LatheGeometry(pts, 28), new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.2, roughness: 0.4, side: THREE.DoubleSide }));
+            dishMesh.rotation.x = Math.PI / 2; dishMesh.castShadow = true;
+            const feed = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.24, 6), silver);
+            feed.rotation.x = Math.PI / 2; feed.position.z = 0.12;
+            const horn = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), silver); horn.position.z = 0.24;
+            this.dishGroup.add(dishMesh, feed, horn);
+            L.add(this.dishGroup);
+
+            const blast = new THREE.Mesh(new THREE.CircleGeometry(1.5, 48), new THREE.MeshBasicMaterial({ map: this.tex.blast, transparent: true, depthWrite: false }));
+            blast.rotation.x = -Math.PI / 2; blast.position.y = 0.02; L.add(blast);
+            const ring = new THREE.Mesh(new THREE.RingGeometry(1.12, 1.22, 64), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+            ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; L.add(ring);
+
+            // 3D Astronot (EVA) figürü — İniş aracının yanında yüzey araştırması yapan astronot
+            const astro = new THREE.Group();
+            const suitMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.52, metalness: 0.08 });
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.14, metalness: 0.92 });
+            const bootMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.7 });
+            const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.30, 12), suitMat);
+            torso.position.y = 0.36; torso.castShadow = true; astro.add(torso);
+            const plss = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.26, 0.13), suitMat);
+            plss.position.set(0, 0.38, -0.11); plss.castShadow = true; astro.add(plss);
+            const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 14), suitMat);
+            helmet.position.y = 0.58; helmet.castShadow = true; astro.add(helmet);
+            const visor = new THREE.Mesh(new THREE.SphereGeometry(0.102, 14, 12), visorMat);
+            visor.position.set(0, 0.58, 0.035); astro.add(visor);
+            [-0.055, 0.055].forEach(lx => {
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.038, 0.22, 10), suitMat);
+                leg.position.set(lx, 0.12, 0); leg.castShadow = true; astro.add(leg);
+                const boot = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.12), bootMat);
+                boot.position.set(lx, 0.025, 0.02); astro.add(boot);
+            });
+            astro.position.set(-1.55, 0.0, 1.35);
+            astro.rotation.y = Math.PI * 0.72;
+            this.astroGroup = astro;
+            L.add(astro);
+
+            L.scale.set(0.42, 0.42, 0.42);
+            this.lander = L;
+            this.scene.add(L);
+        },
+
+        // ---------------------------------------------------------------- DTE iletişim ışını + Güneş ışın/engel hattı + veri paketleri
+        buildBeam() {
+            const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 3, 6)]);
+            this.commBeam = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false }));
+            this.commBeam.frustumCulled = false;
+            this.scene.add(this.commBeam);
+
+            // Güneş ışını & dağ engeli (oklüzyon) gösterimi
+            const sg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 4, -8)]);
+            this.sunRayMat = new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.42, blending: THREE.AdditiveBlending, depthWrite: false });
+            this.sunRayLine = new THREE.Line(sg, this.sunRayMat);
+            this.sunRayLine.frustumCulled = false;
+            this.scene.add(this.sunRayLine);
+
+            this.sunBlockGroup = new THREE.Group();
+            const blkCore = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 16), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+            const blkHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.sunInner, color: 0xef4444, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+            blkHalo.scale.set(1.45, 1.45, 1);
+            this.sunBlockGroup.add(blkCore, blkHalo);
+            this.sunBlockGroup.visible = false;
+            this.scene.add(this.sunBlockGroup);
+
+            this.packets = [];
+            for (let i = 0; i < 7; i++) {
+                const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.packet, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+                s.visible = false; this.scene.add(s); this.packets.push(s);
+            }
+            this.beamStart = new THREE.Vector3(); this.beamEnd = new THREE.Vector3();
+        },
+
+        clearGroup(g) {
+            while (g.children.length) {
+                const o = g.children[g.children.length - 1];
+                g.remove(o);
+                o.traverse(c => {
+                    if (c.geometry) c.geometry.dispose();
+                    if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach(m => {
+                        if (m.userData && m.userData.ownMap && m.map) m.map.dispose();
+                        m.dispose();
+                    });
+                });
+            }
+        },
+
+        // ---------------------------------------------------------------- Konum / LOLA DEM örnekleme
+        skyPos(az, el, R) {
+            const a = THREE.MathUtils.degToRad(az);
+            const clampedEl = Math.max(-20, Math.min(84, el));
+            const e = THREE.MathUtils.degToRad(clampedEl * (Math.abs(clampedEl) <= 18 ? 1.35 : 1.0));
+            const x = R * Math.cos(e) * Math.sin(a);
+            const y = (this.yLander + this.EYE) + R * Math.sin(e);
+            const z = -R * Math.cos(e) * Math.cos(a);
+            return new THREE.Vector3(x, y, z);
+        },
+
+        buildFallbackDem(site) {
+            // Eğer local_dem yoksa küresel harita yüzeyinden yakın ±18km kesit üret
+            const N = 33, rad = 18.0;
+            if (typeof REAL_TERRAIN !== 'undefined' && REAL_TERRAIN && REAL_TERRAIN.terrain_3d && !site.is_equatorial) {
+                const ax = REAL_TERRAIN.terrain_3d.axis_km;
+                const mat = REAL_TERRAIN.terrain_3d.z_km;
+                const M = ax.length, minAx = ax[0], maxAx = ax[M - 1];
+                const sampleGlobal = (gx, gy) => {
+                    const fx = Math.max(0, Math.min(M - 1.0001, (gx - minAx) / (maxAx - minAx) * (M - 1)));
+                    const fy = Math.max(0, Math.min(M - 1.0001, (gy - minAx) / (maxAx - minAx) * (M - 1)));
+                    const c0 = Math.floor(fx), c1 = Math.min(M - 1, c0 + 1), tx = fx - c0;
+                    const r0 = Math.floor(fy), r1 = Math.min(M - 1, r0 + 1), ty = fy - r0;
+                    const v00 = mat[r0][c0], v01 = mat[r0][c1], v10 = mat[r1][c0], v11 = mat[r1][c1];
+                    return (v00 * (1 - tx) + v01 * tx) * (1 - ty) + (v10 * (1 - tx) + v11 * tx) * ty;
+                };
+                const zKm = []; let minKm = 999, maxKm = -999, sum = 0;
+                for (let r = 0; r < N; r++) {
+                    const row = [];
+                    const gy = site.y_km + (1 - 2 * r / (N - 1)) * rad;
+                    for (let c = 0; c < N; c++) {
+                        const gx = site.x_km + (2 * c / (N - 1) - 1) * rad;
+                        const val = Number(sampleGlobal(gx, gy).toFixed(3));
+                        row.push(val); sum += val;
+                        if (val < minKm) minKm = val; if (val > maxKm) maxKm = val;
+                    }
+                    zKm.push(row);
+                }
+                const mid = Math.floor(N / 2);
+                return { radius_km: rad, grid_n: N, z_km: zKm, min_km: minKm, max_km: maxKm, mean_km: sum / (N * N), center_km: zKm[mid][mid] };
+            }
+            const base = site.elevation_km || -1.5;
+            return {
+                radius_km: rad, grid_n: 5,
+                z_km: Array.from({ length: 5 }, () => Array(5).fill(base)),
+                min_km: base, max_km: base, mean_km: base, center_km: base
+            };
+        },
+
+        sampleDemKm(x, z) {
+            const c = this.tctx;
+            const zMat = c.dem.z_km;
+            const N = c.demN;
+            // x ∈ [-R_OUTER, +R_OUTER] -> West (-X) .. East (+X) => col 0 .. N-1
+            // z ∈ [-R_OUTER, +R_OUTER] -> North (-Z) .. South (+Z) => row 0 .. N-1
+            const u = Math.max(0, Math.min(N - 1.0001, ((x / (2 * this.R_OUTER)) + 0.5) * (N - 1)));
+            const v = Math.max(0, Math.min(N - 1.0001, ((z / (2 * this.R_OUTER)) + 0.5) * (N - 1)));
+            const c0 = Math.floor(u), c1 = Math.min(N - 1, c0 + 1), tx = u - c0;
+            const r0 = Math.floor(v), r1 = Math.min(N - 1, r0 + 1), ty = v - r0;
+            const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+            const a = zMat[r0][c0], b = zMat[r0][c1];
+            const d = zMat[r1][c0], e = zMat[r1][c1];
+            return (a * (1 - sx) + b * sx) * (1 - sy) + (d * (1 - sx) + e * sx) * sy;
+        },
+
+        horizonAt(az) {
+            const H = this.tctx.H;
+            if (!H || !H.length) return 0;
+            const a = ((az % 360) + 360) % 360;
+            const i0 = Math.floor(a) % 360, i1 = (i0 + 1) % 360, f = a - Math.floor(a);
+            return H[i0] * (1 - f) + H[i1] * f;
+        },
+
+        sampleSurface(x, z) {
+            const ctx = this.tctx;
+            const r = Math.hypot(x, z);
+            const rNorm = Math.min(1.0, r / this.R_OUTER);
+            const hKm = this.sampleDemKm(x, z);
+            const baseY = (hKm - ctx.refKm) * ctx.vScale;
+
+            // Doğal mikrorölyef ve taraçalı krater morfolojisi (iniş pedi r <= 0.44 düz)
+            const pfRaw = Math.max(0, Math.min(1, (r - 0.44) / 0.85));
+            const pf = pfRaw * pfRaw * (3 - 2 * pfRaw);
+
+            const mAmp = ctx.isEq ? 0.08 : 0.17;
+            const nMacro = SimUtil.fbm2(x * 0.55 + 14.2, z * 0.55 + 9.7, ctx.seed, 4, 0);
+            const fbm = (nMacro - 0.5) * mAmp;
+            const fine = (SimUtil.fbm2(x * 2.4 + 4.1, z * 2.4 + 7.3, ctx.seed + 19, 3, 0) - 0.5) * (mAmp * 0.48);
+
+            // Krater çukuru veya yüksek sırt yamacı ise ufuk profiliyle (horizon_360) fiziksel açı uyumlu sırt/duvar
+            let rimSculpt = 0;
+            if (ctx.hasCraterSculpt && rNorm > 0.16) {
+                const azDeg = ((Math.atan2(x, -z) * 180 / Math.PI) + 360) % 360;
+                const hLim = Math.max(-2.0, Math.min(20.0, this.horizonAt(azDeg)));
+                const wallBell = Math.exp(-Math.pow((rNorm - 0.84) / 0.22, 2));
+                const terrace = Math.sin(rNorm * 13.5 + nMacro * 3.8) * 0.048 * Math.sin(rNorm * Math.PI);
+                const trueRidgeH = Math.max(0, Math.tan(THREE.MathUtils.degToRad(hLim * 1.18)) * (this.R_OUTER * 0.82));
+                rimSculpt = wallBell * (0.16 + trueRidgeH * 0.78) + terrace;
+            }
+
+            let microDisp = 0, microShade = 0;
+            for (let k = 0; k < ctx.craters.length; k++) {
+                const cr = ctx.craters[k];
+                const d = Math.hypot(x - cr.x, z - cr.z);
+                if (d > cr.r * 1.65) continue;
+                const dn = d / cr.r;
+                if (dn < 1.0) {
+                    const bowl = Math.pow(1.0 - dn * dn, 1.35);
+                    microDisp -= cr.d * bowl;
+                    microShade -= 0.065 * bowl;
+                }
+                const rim = Math.exp(-Math.pow((dn - 1.0) / 0.20, 2));
+                microDisp += cr.d * 0.48 * rim;
+                microShade += 0.075 * rim;
+            }
+
+            const y = ctx.yLander + (baseY - ctx.yLander + fbm + fine + rimSculpt + microDisp) * pf;
+
+            // Bantlaşmasız doğal regolit gölgelemesi (eğim/çukurluk AO + krater çanak/ejecta tonlaması)
+            const relMean = hKm - ctx.meanKm;
+            let cr, cg, cb;
+            if (ctx.isEq) {
+                const n = SimUtil.fbm2(x * 0.55 + 2, z * 0.55 + 6, ctx.seed + 3, 3, 0);
+                const v = 0.28 + n * 0.13 + microShade;
+                cr = v * 0.96; cg = v * 0.98; cb = v * 1.02;
+            } else {
+                const pitAO = Math.max(-0.08, Math.min(0.08, (relMean / Math.max(1.5, ctx.span)) * 0.14));
+                const rimGlow = Math.max(0, Math.min(0.06, rimSculpt * 0.08));
+                const lum = 0.36 + pitAO + rimGlow + (nMacro - 0.5) * 0.10 + (fine * 0.22) + microShade;
+                const coldPit = Math.max(0, Math.min(1, (-relMean - 0.45) / 2.6));
+                cr = lum * (1.0 - coldPit * 0.11);
+                cg = lum * (1.0 - coldPit * 0.04);
+                cb = lum * (1.0 + coldPit * 0.14);
+            }
+            const clamp = (v) => Math.max(0.14, Math.min(0.56, v));
+            return { y, r: clamp(cr), g: clamp(cg), b: clamp(cb), hKm };
+        },
+
+        // ---------------------------------------------------------------- Yeni bölge yükleme
+        updateSiteTerrain(site, timeline) {
+            if (!this.initialized) return;
+            if (this.fpv) this.toggleView();
+            this.clearGroup(this.terrainGroup);
+            this.clearGroup(this.orbitGroup);
+
+            const H = site.horizon_360;
+            const seed = Math.abs(Math.round((site.lat || -89) * 1000 + (site.lon || 0) * 137)) % 10000 + 7;
+            const rnd = SimUtil.rng(seed);
+            const dem = (site.local_dem && site.local_dem.z_km && site.local_dem.z_km.length >= 3)
+                ? site.local_dem
+                : this.buildFallbackDem(site);
+
+            const demN = dem.z_km.length;
+            const minKm = dem.min_km !== undefined ? dem.min_km : site.elevation_km;
+            const maxKm = dem.max_km !== undefined ? dem.max_km : site.elevation_km;
+            const meanKm = dem.mean_km !== undefined ? dem.mean_km : site.elevation_km;
+            const centerKm = dem.center_km !== undefined ? dem.center_km : site.elevation_km;
+            const span = Math.max(0.25, maxKm - minKm);
+            const vScale = span > 6.0 ? (5.0 / span) : 0.86;
+            const refKm = meanKm;
+            const yLander = (centerKm - refKm) * vScale;
+
+            const minH = Math.min(...H), maxH = Math.max(...H);
+            const relCenter = centerKm - meanKm;
+            const hasCraterSculpt = !site.is_equatorial && (relCenter < 0.25 || maxH > 5.0);
+
+            // Çok ölçekli doğal 3D çarpma kraterleri (taraçalı çanak + ejecta kenarı)
+            const craters = [];
+            const crCount = site.is_equatorial ? 50 : 78;
+            for (let i = 0; i < crCount; i++) {
+                const rr = 1.35 + Math.pow(rnd(), 0.70) * (this.R_OUTER - 1.75);
+                const aa = rnd() * Math.PI * 2;
+                const rad = 0.20 + Math.pow(rnd(), 2.0) * 0.88;
+                if (rr - rad < 0.85) continue;
+                craters.push({ x: rr * Math.cos(aa), z: rr * Math.sin(aa), r: rad, d: rad * (0.16 + rnd() * 0.15) });
+            }
+
+            this.yLander = yLander;
+            this.tctx = {
+                H, seed, dem, demN, minKm, maxKm, meanKm, centerKm, refKm, span, vScale, yLander,
+                craters, isEq: !!site.is_equatorial, hasCraterSculpt
+            };
+
+            this.buildTerrainDisk();
+            this.buildBoulders(rnd);
+            this.buildCompassAndContours();
+            this.buildPaths(timeline);
+
+            // İniş aracı, hedef kamera ve ped ışığını yeni rakıma göre konumla
+            this.lander.position.set(0, yLander, 0);
+            this.padLight.position.set(0, yLander + 0.85, 0);
+            this.sunLight.target.position.set(0, yLander * 0.35, 0);
+
+            if (this.controls) {
+                const offset = this.camera.position.clone().sub(this.controls.target);
+                this.controls.target.set(0, yLander + 0.35, 0);
+                const newPos = this.controls.target.clone().add(offset);
+                if (newPos.y < yLander + 1.4) newPos.y = yLander + 3.2;
+                this.camera.position.copy(newPos);
+                this.controls.update();
+            }
+
+            // HUD ölçeğini konum tipine göre güncelle
+            const isEn = (typeof LANG !== 'undefined' && LANG === 'en');
+            let terrainTag = isEn ? '⛰️ Crater Slope / Plateau' : '⛰️ Krater Yamacı / Plato';
+            if (site.is_equatorial) terrainTag = isEn ? '🌑 Equatorial Plain (Mare)' : '🌑 Ekvator Düzlüğü (Mare)';
+            else if (relCenter < -0.50 || minH > 6.5) terrainTag = isEn ? '🕳️ Deep Crater Bowl (PSR/Shadow)' : '🕳️ Derin Krater Çukuru (Gölge/PSR)';
+            else if (relCenter > 0.40 || (maxH < 6.0 && site.elevation_km > 0.2)) terrainTag = isEn ? '🏔️ High Peak / Ridge (Sunlit)' : '🏔️ Yüksek Zirve / Sırt (Güneşli)';
+
+            const sc = document.getElementById('hudScale');
+            if (sc) sc.textContent = isEn
+                ? `${terrainTag} | Elev: ${site.elevation_km} km | Horizon: ${minH.toFixed(1)}°…${maxH.toFixed(1)}°`
+                : `${terrainTag} | Rakım: ${site.elevation_km} km | Ufuk: ${minH.toFixed(1)}°…${maxH.toFixed(1)}°`;
+        },
+
+        // ---------------------------------------------------------------- Konuma özgü LOLA arazi diski + jeolojik yan kesit kaidesi
+        buildTerrainDisk() {
+            const NRad = 88, NAng = 168;
+            const R = this.R_OUTER;
+            const cols = NAng + 1;
+            const count = (NRad + 1) * cols;
+            const pos = new Float32Array(count * 3);
+            const col = new Float32Array(count * 3);
+            const uv = new Float32Array(count * 2);
+
+            let minEdgeY = 999, p = 0;
+            const rimSamples = [];
+            for (let i = 0; i <= NRad; i++) {
+                const rad = (i / NRad) * R;
+                for (let j = 0; j <= NAng; j++) {
+                    const jj = j % NAng;
+                    const ang = (jj / NAng) * Math.PI * 2;
+                    const x = rad * Math.sin(ang);
+                    const z = -rad * Math.cos(ang);
+                    const s = this.sampleSurface(x, z);
+                    pos[p * 3] = x; pos[p * 3 + 1] = s.y; pos[p * 3 + 2] = z;
+                    col[p * 3] = s.r; col[p * 3 + 1] = s.g; col[p * 3 + 2] = s.b;
+                    uv[p * 2] = (x / (2 * R) + 0.5) * 6;
+                    uv[p * 2 + 1] = (z / (2 * R) + 0.5) * 6;
+                    if (i === NRad) {
+                        rimSamples.push({ x, y: s.y, z, r: s.r, g: s.g, b: s.b });
+                        if (s.y < minEdgeY) minEdgeY = s.y;
+                    }
+                    p++;
+                }
+            }
+
+            const idx = [];
+            for (let i = 0; i < NRad; i++) {
+                for (let j = 0; j < NAng; j++) {
+                    const a = i * cols + j;
+                    const b = a + 1;
+                    const c = (i + 1) * cols + j;
+                    const d = c + 1;
+                    idx.push(a, b, c, b, d, c);
+                }
+            }
+
+            const g = new THREE.BufferGeometry();
+            g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+            g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+            g.setIndex(idx);
+            g.computeVertexNormals();
+
+            const mat = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                map: this.tex.regolith,
+                bumpMap: this.tex.regolith,
+                bumpScale: 0.065,
+                roughness: 0.94,
+                metalness: 0.02
+            });
+            const diskMesh = new THREE.Mesh(g, mat);
+            diskMesh.receiveShadow = true;
+            diskMesh.castShadow = true;
+            this.terrainGroup.add(diskMesh);
+
+            // Jeolojik yan kesit kaidesi + kapalı taban
+            const yBase = Math.min(-2.5, minEdgeY - 1.15);
+            const sPos = new Float32Array((NAng + 1) * 3 * 3);
+            const sCol = new Float32Array((NAng + 1) * 3 * 3);
+            const sIdx = [];
+            for (let j = 0; j <= NAng; j++) {
+                const rm = rimSamples[j];
+                const yMid = rm.y * 0.45 + yBase * 0.55;
+                const k0 = j * 3, k1 = k0 + 1, k2 = k0 + 2;
+                sPos[k0 * 3] = rm.x; sPos[k0 * 3 + 1] = rm.y; sPos[k0 * 3 + 2] = rm.z;
+                sCol[k0 * 3] = rm.r * 0.65; sCol[k0 * 3 + 1] = rm.g * 0.65; sCol[k0 * 3 + 2] = rm.b * 0.68;
+
+                sPos[k1 * 3] = rm.x; sPos[k1 * 3 + 1] = yMid; sPos[k1 * 3 + 2] = rm.z;
+                sCol[k1 * 3] = 0.09; sCol[k1 * 3 + 1] = 0.11; sCol[k1 * 3 + 2] = 0.15;
+
+                sPos[k2 * 3] = rm.x; sPos[k2 * 3 + 1] = yBase; sPos[k2 * 3 + 2] = rm.z;
+                sCol[k2 * 3] = 0.04; sCol[k2 * 3 + 1] = 0.055; sCol[k2 * 3 + 2] = 0.09;
+
+                if (j < NAng) {
+                    const n0 = (j + 1) * 3, n1 = n0 + 1, n2 = n0 + 2;
+                    sIdx.push(k0, n0, k1, n0, n1, k1);
+                    sIdx.push(k1, n1, k2, n1, n2, k2);
+                }
+            }
+            const sg = new THREE.BufferGeometry();
+            sg.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
+            sg.setAttribute('color', new THREE.BufferAttribute(sCol, 3));
+            sg.setIndex(sIdx);
+            sg.computeVertexNormals();
+            const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.05 }));
+            skirt.castShadow = true; skirt.receiveShadow = true;
+            this.terrainGroup.add(skirt);
+
+            // Alt kapak + kaide çevre çizgisi
+            const cap = new THREE.Mesh(new THREE.CircleGeometry(R, 96), new THREE.MeshBasicMaterial({ color: 0x050811 }));
+            cap.rotation.x = Math.PI / 2; cap.position.y = yBase;
+            this.terrainGroup.add(cap);
+
+            const baseRing = new THREE.Mesh(new THREE.RingGeometry(R - 0.04, R + 0.04, 128), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.28, side: THREE.DoubleSide }));
+            baseRing.rotation.x = Math.PI / 2; baseRing.position.y = yBase + 0.01;
+            this.terrainGroup.add(baseRing);
+        },
+
+        buildBoulders(rnd) {
+            const n = 56;
+            const inst = new THREE.InstancedMesh(
+                new THREE.IcosahedronGeometry(1, 0),
+                new THREE.MeshStandardMaterial({ color: 0x8e95a3, map: this.tex.regolith, roughness: 0.94, flatShading: true }),
+                n
+            );
+            const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3(), e = new THREE.Euler();
+            for (let i = 0; i < n; i++) {
+                const rr = 0.95 + rnd() * (this.R_OUTER - 1.35);
+                const ang = rnd() * Math.PI * 2;
+                const x = rr * Math.sin(ang), z = -rr * Math.cos(ang);
+                const surf = this.sampleSurface(x, z);
+                const size = 0.03 + Math.pow(rnd(), 2.3) * 0.095;
+                v.set(x, surf.y + size * 0.22, z);
+                e.set(rnd() * 3, rnd() * 3, rnd() * 3); q.setFromEuler(e);
+                s.set(size * (0.75 + rnd() * 0.55), size * (0.45 + rnd() * 0.35), size * (0.75 + rnd() * 0.55));
+                m4.compose(v, q, s); inst.setMatrixAt(i, m4);
+            }
+            inst.instanceMatrix.needsUpdate = true;
+            inst.castShadow = true; inst.receiveShadow = true;
+            this.terrainGroup.add(inst);
+        },
+
+        buildCompassAndContours() {
+            // Arazi üzerindeki referans azimut halkası + 360° LOLA Ufuk Engeli Profili (r = 8.4)
+            const pts = [];
+            for (let az = 0; az <= 360; az += 2) {
+                const a = THREE.MathUtils.degToRad(az);
+                const x = 8.4 * Math.sin(a), z = -8.4 * Math.cos(a);
+                pts.push(new THREE.Vector3(x, this.sampleSurface(x, z).y + 0.05, z));
+            }
+            this.terrainGroup.add(new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints(pts),
+                new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.52 })
+            ));
+
+            const isEn = (typeof LANG !== 'undefined' && LANG === 'en');
+            const dirs = isEn
+                ? [['NORTH 0°', 0], ['EAST 90°', 90], ['SOUTH 180°', 180], ['WEST 270°', 270]]
+                : [['KUZEY 0°', 0], ['DOĞU 90°', 90], ['GÜNEY 180°', 180], ['BATI 270°', 270]];
+
+            dirs.forEach(([txt, az]) => {
+                const c = document.createElement('canvas'); c.width = 256; c.height = 96;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = 'rgba(9,13,22,0.88)';
+                ctx.beginPath();
+                ctx.roundRect ? ctx.roundRect(10, 12, 236, 72, 18) : ctx.fillRect(10, 12, 236, 72);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(56,189,248,0.65)'; ctx.lineWidth = 3; ctx.stroke();
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 31px Segoe UI, sans-serif';
+                ctx.fillText(txt, 128, 49);
+                const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthTest: false });
+                mat.userData.ownMap = true;
+                const spr = new THREE.Sprite(mat);
+                const a = THREE.MathUtils.degToRad(az);
+                const ex = (this.R_OUTER - 0.1) * Math.sin(a), ez = -(this.R_OUTER - 0.1) * Math.cos(a);
+                const edgeY = this.sampleSurface(ex, ez).y;
+                const lx = (this.R_OUTER + 0.65) * Math.sin(a), lz = -(this.R_OUTER + 0.65) * Math.cos(a);
+                spr.position.set(lx, edgeY + 0.68, lz);
+                spr.scale.set(1.68, 0.64, 1); spr.renderOrder = 10;
+                this.terrainGroup.add(spr);
+            });
+        },
+
+        buildPaths(timeline) {
+            const mk = (key, onC, offC, R) => {
+                const pts = [], cols = [];
+                const on = new THREE.Color(onC), off = new THREE.Color(offC);
+                timeline.forEach(t => {
+                    pts.push(this.skyPos(t[key + '_az'], t[key + '_el'], R));
+                    const c = t[key + '_visible'] ? on : off; cols.push(c.r, c.g, c.b);
+                });
+                if (pts.length < 2) return;
+                const g = new THREE.BufferGeometry().setFromPoints(pts);
+                g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+                this.orbitGroup.add(new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85 })));
+            };
+            mk('sun', 0xfacc15, 0x785b18, this.R_SUN);
+            mk('earth', 0x4ade80, 0x205739, this.R_EARTH);
+        },
+
+        // ---------------------------------------------------------------- Zaman karesi
+        setFrame(cur) {
+            if (!this.initialized || !cur) return;
+            const sunPos = this.skyPos(cur.sun_az, cur.sun_el, this.R_SUN);
+            const earthPos = this.skyPos(cur.earth_az, cur.earth_el, this.R_EARTH);
+            this.sunGroup.position.copy(sunPos);
+            this.earthGroup.position.copy(earthPos);
+
+            // Yönlü Güneş ışığı daima yatay üstünden gerçek krater duvarlarına vurur -> iç gölge oluşturur
+            const azRad = THREE.MathUtils.degToRad(cur.sun_az);
+            const lightEl = THREE.MathUtils.degToRad(Math.max(0.6, Math.min(82, cur.sun_el * (Math.abs(cur.sun_el) <= 18 ? 1.35 : 1.0))));
+            const dirTarget = new THREE.Vector3(0, this.yLander * 0.35, 0);
+            const sunVec = new THREE.Vector3(
+                Math.cos(lightEl) * Math.sin(azRad),
+                Math.sin(lightEl),
+                -Math.cos(lightEl) * Math.cos(azRad)
+            ).normalize();
+            this.sunLight.position.copy(dirTarget).add(sunVec.multiplyScalar(24));
+            this.sunLight.target.position.copy(dirTarget);
+
+            const earthDir = earthPos.clone().sub(dirTarget).normalize();
+            this.earthshine.position.copy(dirTarget).add(earthDir.multiplyScalar(20));
+            this.earthMat.uniforms.sunDir.value.copy(sunPos.clone().sub(earthPos).normalize());
+            this.panelGroup.rotation.y = Math.atan2(sunPos.x, sunPos.z);
+            this.dishGroup.lookAt(earthPos);
+
+            // Güneş Işını & Krater Sırtı Engel (Oklüzyon) Hattı Güncellemesi
+            const panelWorldPos = new THREE.Vector3(0, this.yLander + 0.90, 0);
+            if (this.sunRayLine) {
+                const sp = this.sunRayLine.geometry.attributes.position;
+                if (cur.sun_visible) {
+                    sp.setXYZ(0, sunPos.x, sunPos.y, sunPos.z);
+                    sp.setXYZ(1, panelWorldPos.x, panelWorldPos.y, panelWorldPos.z);
+                    this.sunRayMat.color.setHex(0xfacc15);
+                    this.sunRayMat.opacity = 0.38;
+                    if (this.sunBlockGroup) this.sunBlockGroup.visible = false;
+                } else {
+                    const rx = 8.35 * Math.sin(azRad), rz = -8.35 * Math.cos(azRad);
+                    const ridgeY = this.tctx ? (this.sampleSurface(rx, rz).y + 0.14) : (this.yLander + 0.8);
+                    sp.setXYZ(0, sunPos.x, sunPos.y, sunPos.z);
+                    sp.setXYZ(1, rx, ridgeY, rz);
+                    this.sunRayMat.color.setHex(0xf97316);
+                    this.sunRayMat.opacity = 0.65;
+                    if (this.sunBlockGroup) {
+                        this.sunBlockGroup.position.set(rx, ridgeY, rz);
+                        this.sunBlockGroup.visible = true;
+                    }
+                }
+                sp.needsUpdate = true;
+            }
+
+            const sunHud = document.getElementById('hudSunStatus');
+            const isEn = (typeof LANG !== 'undefined' && LANG === 'en');
+            if (cur.sun_visible) {
+                this.sunLight.intensity = 2.65;
+                this.hemiLight.intensity = 0.56;
+                this.hemiLight.color.setHex(0xa6bde2);
+                this.earthshine.intensity = cur.earth_visible ? 0.22 : 0.12;
+                this.padLight.intensity = 0.32;
+                this.sunCore.material.color.setHex(0xfffbea);
+                this.sunGlowA.material.opacity = 1.0; this.sunGlowB.material.opacity = 0.85; this.sunFlare.material.opacity = 0.72;
+                const sunLabel = cur.sun_el > 20.0
+                    ? (isEn ? 'OVERHEAD SUN (Equator)' : 'TEPEDE GÜNEŞ (Ekvator)')
+                    : (isEn ? 'HORIZON SUN (Sunlit)' : 'UFUKTA GÜNEŞ (Güneşli)');
+                sunHud.innerHTML = `☀️ <span style="color:#facc15;">${sunLabel} (${cur.sun_el.toFixed(1)}°) | ${isEn ? 'Charge' : 'Şarj'}: %${cur.solar_power_pct}</span>`;
+            } else {
+                const belowHorizon = cur.sun_el <= 0.0;
+                this.sunLight.intensity = belowHorizon ? 0.28 : 1.15;
+                this.hemiLight.intensity = belowHorizon ? 0.18 : 0.24;
+                this.hemiLight.color.setHex(0x4b6594);
+                this.earthshine.intensity = cur.earth_visible ? 0.36 : 0.12;
+                this.padLight.intensity = 0.92;
+                this.sunCore.material.color.setHex(0xff9e5e);
+                this.sunGlowA.material.opacity = 0.45; this.sunGlowB.material.opacity = 0.25; this.sunFlare.material.opacity = 0.15;
+                sunHud.innerHTML = `🌑 <span style="color:#f87171;">${isEn ? 'IN CRATER SHADOW (Horizon Limit' : 'KRATER GÖLGESİNDE (Ufuk Engeli'}: ${cur.sun_horizon_limit.toFixed(1)}°)</span>`;
+            }
+
+            // Canlı Yüzey Sıcaklığı (°C / K), Güneş Paneli Gücü (kW) ve Ufuk Farkı (Δ°)
+            const thermHud = document.getElementById('hudThermalBadge');
+            if (thermHud) {
+                const tempC = cur.sun_visible
+                    ? Math.round(-45 + Math.min(90, cur.sun_el) * 1.45 + (cur.solar_power_pct * 0.45))
+                    : Math.round(-198 - Math.max(0, (cur.sun_horizon_limit - cur.sun_el) * 2.5));
+                const kw = ((cur.solar_power_pct / 100) * 2.10).toFixed(2);
+                const clr = (cur.sun_el - cur.sun_horizon_limit);
+                const clrStr = (clr >= 0 ? `+${clr.toFixed(1)}°` : `${clr.toFixed(1)}°`);
+                const tColor = cur.sun_visible ? '#facc15' : '#38bdf8';
+                thermHud.innerHTML = isEn
+                    ? `🌡️ Temp: <b style="color:${tColor};">${tempC}°C</b> | ⚡ Array: <b>${kw} kW</b> | ΔHorizon: <b>${clrStr}</b>`
+                    : `🌡️ Yüzey: <b style="color:${tColor};">${tempC}°C</b> | ⚡ Panel: <b>${kw} kW</b> | ΔUfuk: <b>${clrStr}</b>`;
+            }
+
+            const earthHud = document.getElementById('hudEarthStatus');
+            this.beamVisible = !!cur.earth_visible;
+            this.commBeam.visible = this.beamVisible;
+            if (cur.earth_visible) {
+                earthHud.innerHTML = `🌍 <span style="color:#4ade80;">${isEn ? 'EARTH LINKED' : 'DÜNYA BAĞLI'} (${cur.earth_el.toFixed(1)}°) | ${isEn ? 'Delay' : 'Gecikme'}: 1.28s (OWLT) | DSN DTE</span>`;
+            } else {
+                earthHud.innerHTML = `📡 <span style="color:#f87171;">${isEn ? 'COMM BLACKOUT (Crater Occlusion - Relay Req.)' : 'İLETİŞİM KESİK (Krater/Dağ Engeli - Röle Şart)'}</span>`;
+            }
+
+            document.getElementById('animTimeLabel').textContent = `${cur.datetime_utc} UTC`;
+        },
+
+        // ---------------------------------------------------------------- İniş aracına yakın kamera odaklama
+        focusLander() {
+            if (!this.initialized) return;
+            if (this.fpv) this.toggleView();
+            const c = this.controls;
+            c.target.set(0, this.yLander + 0.48, 0);
+            this.camera.position.set(-2.35, this.yLander + 1.35, 2.85);
+            c.update();
+        },
+
+        // ---------------------------------------------------------------- Astronot (EVA yüzey) görünümü
+        toggleView() {
+            if (!this.initialized) return;
+            const btn = document.getElementById('viewBtn');
+            const c = this.controls;
+            const isEn = (typeof LANG !== 'undefined' && LANG === 'en');
+            this.fpv = !this.fpv;
+            if (this.fpv) {
+                this.savedCam = { pos: this.camera.position.clone(), tgt: c.target.clone() };
+                // Astronot yüzeyde iniş aracının hemen yanından ufka, araca, Güneş'e ve Dünya'ya bakar
+                const ax = -1.15, az = 1.15;
+                const surfY = this.tctx ? this.sampleSurface(ax, az).y : this.yLander;
+                const eye = new THREE.Vector3(ax, surfY + 0.56, az);
+                const lookTgt = new THREE.Vector3(0, this.yLander + 0.52, 0);
+                const dir = lookTgt.clone().sub(eye).normalize();
+                c.target.copy(eye).add(dir.multiplyScalar(0.18));
+                this.camera.position.copy(eye);
+                c.minDistance = 0.05; c.maxDistance = 0.45;
+                c.enableZoom = true; c.enablePan = false;
+                c.minPolarAngle = Math.PI * 0.18; c.maxPolarAngle = Math.PI * 0.72;
+                this.camera.fov = 62;
+                this.lander.visible = true;
+                if (btn) btn.textContent = isEn ? '🛰 Orbit View' : '🛰 Yörünge Görünümü';
+            } else {
+                c.minDistance = 2.2; c.maxDistance = 38;
+                c.enableZoom = true; c.enablePan = true;
+                c.minPolarAngle = 0; c.maxPolarAngle = Math.PI * 0.85;
+                if (this.savedCam) { this.camera.position.copy(this.savedCam.pos); c.target.copy(this.savedCam.tgt); }
+                this.camera.fov = 44;
+                this.lander.visible = true;
+                if (btn) btn.textContent = isEn ? '👁 Astronaut View' : '👁 Astronot Görünümü';
+            }
+            this.camera.updateProjectionMatrix();
+            c.update();
+        },
+
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            const t = this.clock ? this.clock.getElapsedTime() : 0;
+            if (this.controls) this.controls.update();
+            if (this.earthMesh) {
+                this.earthMesh.rotation.y = t * 0.06;
+                this.earthMat.uniforms.cloudShift.value = t * 0.003;
+            }
+            if (this.beacon) this.beacon.material.emissiveIntensity = (t % 1.6) < 0.18 ? 3.2 : 0.25;
+            if (this.sunFlare) this.sunFlare.material.rotation = t * 0.02;
+
+            if (this.beamVisible && this.dishGroup) {
+                this.dishGroup.getWorldPosition(this.beamStart);
+                this.beamEnd.copy(this.earthGroup.position);
+                const p = this.commBeam.geometry.attributes.position;
+                p.setXYZ(0, this.beamStart.x, this.beamStart.y, this.beamStart.z);
+                p.setXYZ(1, this.beamEnd.x, this.beamEnd.y, this.beamEnd.z);
+                p.needsUpdate = true;
+                this.packets.forEach((s, i) => {
+                    const k = (t * 0.35 + i / this.packets.length) % 1;
+                    s.position.lerpVectors(this.beamStart, this.beamEnd, k);
+                    const sc = 0.20 + k * 0.35; s.scale.set(sc, sc, 1);
+                    s.material.opacity = Math.sin(k * Math.PI) * 0.9 + 0.1;
+                    s.visible = true;
+                });
+            } else {
+                this.packets.forEach(s => { s.visible = false; });
+            }
+
+            if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
+        }
+    };
+
+    // =========================================================================
+    // ARAYÜZ & VERİ YÖNETİMİ
+    // =========================================================================
+    let CURRENT_PAGE = 'overview';
+    function switchPage(pageKey) {
+        CURRENT_PAGE = pageKey || 'overview';
+        const pages = {
+            overview: { sec: 'pageOverview', btn: 'tabBtnOverview' },
+            timeline: { sec: 'pageTimeline', btn: 'tabBtnTimeline' },
+            compare:  { sec: 'pageCompare',  btn: 'tabBtnCompare' },
+            ai:       { sec: 'pageAi',       btn: 'tabBtnAi' }
+        };
+        Object.keys(pages).forEach(k => {
+            const secEl = document.getElementById(pages[k].sec);
+            const btnEl = document.getElementById(pages[k].btn);
+            if (secEl) secEl.classList.toggle('active', k === CURRENT_PAGE);
+            if (btnEl) btnEl.classList.toggle('active', k === CURRENT_PAGE);
+        });
+        const refreshCharts = () => {
+            try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+            try {
+                if (CURRENT_PAGE === 'overview' && window.Plotly && document.getElementById('lunar3dMap')) {
+                    Plotly.Plots.resize(document.getElementById('lunar3dMap'));
+                }
+                if (CURRENT_PAGE === 'timeline' && window.Plotly && document.getElementById('timelineChart')) {
+                    Plotly.Plots.resize(document.getElementById('timelineChart'));
+                }
+            } catch (_) {}
+        };
+        requestAnimationFrame(refreshCharts);
+        setTimeout(refreshCharts, 60);
+    }
+
+    function setLanguage(lang) {
+        LANG = (lang === 'en') ? 'en' : 'tr';
+        try { localStorage.setItem('lunar_lang', LANG); } catch (_) {}
+        document.getElementById('btnLangTR').classList.toggle('active', LANG === 'tr');
+        document.getElementById('btnLangEN').classList.toggle('active', LANG === 'en');
+        const en = LANG === 'en';
+        const setTxt = (id, trTxt, enTxt) => { const el = document.getElementById(id); if (el) el.textContent = en ? enTxt : trTxt; };
+        const setHtml = (id, trHtml, enHtml) => { const el = document.getElementById(id); if (el) el.innerHTML = en ? enHtml : trHtml; };
+
+        setTxt('hdrTitle', 'AY İNİŞ YERİ NAVİGATÖRÜ 3D (LUNAR LANDING SITE NAVIGATOR)', 'LUNAR LANDING SITE NAVIGATOR 3D');
+        setTxt('hdrSub', 'Artemis, CLPS, CNSA, ISRO, ESA/JAXA ve Özel Koordinatlar İçin Gerçek NASA LOLA DEM (80m/px) + JPL Horizons Planlayıcısı', 'Real NASA LRO LOLA DEM (80m/px) + JPL Horizons Mission Planner for Artemis, CLPS, CNSA, ISRO & Custom Coordinates');
+        setTxt('btnEng', 'Mühendislik Modu', 'Engineering Mode');
+        setTxt('btnEdu', 'Eğitim & Halk Modu', 'Education & Public Mode');
+        setTxt('loader', 'Hesaplanıyor...', 'Calculating...');
+
+        setTxt('eduBoxTitle', '🎓 Eğitim & Halk Rehberi: Ay Güney Kutbu Neden Tarihin En Zorlu Görev Hedefidir?', '🎓 Education & Public Guide: Why Is the Lunar South Pole the Ultimate Mission Challenge?');
+        setHtml('eduBoxList',
+            `<li><strong>1.54° Eksen Eğikliği & Ufuk Boyu Güneş:</strong> Dünya'nın ekseni 23.5° eğikken Ay'ın ekseni yalnızca 1.54° eğiktir. Bu nedenle Güney Kutbu'nda Güneş göğe yükselmez, ufuk çizgisini sıyırarak 360° döner. Dağ tepeleri neredeyse sürekli ışık alırken, krater tabanları milyarlarca yıldır zifiri karanlıktadır.</li>
+             <li><strong>Kalıcı Gölge Bölgeleri (PSR) & Su Buzu:</strong> Kraterlerin dibi -240°C'ye varan dondurucu soğukluktadır. Güneş ışığı görmeyen bu "Kalıcı Gölge Bölgeleri"nde (Permanently Shadowed Regions - PSR) geleceğin Ay üssü, içme suyu ve roket yakıtı (sıvı hidrojen/oksijen) için hayati olan milyarlarca tonluk <strong>su buzu</strong> saklıdır.</li>
+             <li><strong>Apollo (Ekvator) ile Artemis (Güney Kutbu) Tezadı:</strong> Geçmişteki tarihi Apollo görevleri Ay ekvatoruna inmişti. Ekvatorda Güneş gökyüzünün tam tepesine (~80°-90°) çıkar ve 14 Dünya günü boyunca kesintisiz aydınlatır; Dünya ise gökyüzünde sabittir. Güney Kutbu'nda ise küçük bir krater sırtı Güneş'i veya Dünya'yı anında örter; uzay aracı saniyeler içinde dondurucu karanlığa gömülür.</li>
+             <li><strong>Ay'ın Yalpalaması (Librasyon) & İletişim Gecikmesi:</strong> Ay Dünya'ya hep aynı yüzünü dönse de, yörüngesindeki salınım (optik ve fiziksel librasyon) nedeniyle Dünya Güney Kutbu ufkunda ±6° ile ±8° arasında adeta dans eder. ~384.400 km'lik mesafe nedeniyle Dünya'ya gönderilen bir radyo telemetri sinyali tek yönde <strong>~1.28 saniyede</strong> (OWLT - One Way Light Time) ulaşır.</li>`,
+            `<li><strong>1.54° Axial Tilt & Grazing Horizon Sun:</strong> While Earth's axis is tilted at 23.5°, the Moon's tilt is only 1.54°. At the South Pole, the Sun never rises high overhead—it skims 360° along the horizon. High mountain peaks receive near-continuous sunlight while crater floors remain in eternal darkness.</li>
+             <li><strong>Permanently Shadowed Regions (PSR) & Water Ice:</strong> Deep crater floors reach -240°C (~40 K). These Permanently Shadowed Regions (PSRs) trap billions of tons of <strong>water ice</strong>—vital for future lunar habitats, drinking water, and liquid hydrogen/oxygen rocket propellant.</li>
+             <li><strong>Apollo (Equator) vs. Artemis (South Pole):</strong> Historic Apollo missions landed near the lunar equator, where the Sun climbs ~80°–90° overhead for 14 Earth days and Earth stays high in the sky. At the South Pole, a nearby crater rim can block the Sun or Earth at any moment.</li>
+             <li><strong>Lunar Libration & Light-Time Delay:</strong> Due to orbital eccentricity and inclination (libration), Earth nods ±6° to ±8° across the polar horizon, and radio/laser telemetry across ~384,400 km takes <strong>~1.28 seconds</strong> one-way (OWLT).</li>`
+        );
+
+        setTxt('scenBarTitle', '⚡ Hızlı Görev & Karşılaştırma Senaryoları (Tek Tıkla Simülasyon)', '⚡ Quick Mission & Comparison Scenarios (One-Click Simulation)');
+        setTxt('scenBarSub', 'Fırlatma gecikmesi, topografik gölge farkı, uluslararası görevler ve ekvator-kutup kıyaslamasını anında test edin.', 'Instantly test launch delays, topographic shadow extremes, international missions, and equator vs. pole dynamics.');
+        setTxt('sc1Title', '🚀 Fırlatma +7 Gün Gecikirse', '🚀 +7-Day Launch Delay');
+        setTxt('sc1Tag', 'Takvim Kayması', 'Schedule Slip');
+        setTxt('sc1Desc', "Shackleton Rim'de 15 Kasım yerine 22 Kasım'da inilirse enerji ve Dünya iletişimi nasıl değişir?", 'How do solar power and Earth communication change at Shackleton Rim if landing slips from Nov 15 to Nov 22?');
+        setTxt('sc2Title', '🏔️ Aydınlık Sırt vs. Krater Çukuru', '🏔️ Sunlit Ridge vs. Crater Bowl');
+        setTxt('sc2Tag', 'LOLA Topografya', 'LOLA Topography');
+        setTxt('sc2Desc', 'Birkaç km mesafedeki derin krater gölgesi (-88.8°S) ile yüksek sırtın (%90+ güneş) dramatik farkı.', 'Dramatic contrast between a deep crater shadow (-88.8°S) and a nearby high ridge just kilometers away.');
+        setTxt('sc3Title', '🌐 Uluslararası Kutup Yarışı', '🌐 International Polar Race');
+        setTxt('sc3Tag', 'CNSA vs. NASA', 'CNSA vs. NASA');
+        setTxt('sc3Desc', "Çin Chang'e-7 (Shackleton Sırtı) ile NASA VIPER (Nobile Rim 1) hedeflerinin yan yana analizi.", "Side-by-side comparison of China's Chang'e-7 (Shackleton Rim) and NASA VIPER (Nobile Rim 1).");
+        setTxt('sc4Title', '🎓 Kutup vs. Tarihi Apollo 11', '🎓 South Pole vs. Historic Apollo 11');
+        setTxt('sc4Tag', 'Eğitim & Halk', 'Education & Public');
+        setTxt('sc4Desc', "Güney Kutbu'nda ufku sıyıran Güneş ile Apollo 11 Ekvator düzlüğündeki 90° tepe güneşinin farkı.", 'Compare grazing horizon sunlight at the South Pole with the 90° overhead Sun at the Apollo 11 equatorial plain.');
+
+        setTxt('lblSiteA', '🔵 Seçenek A: İniş Bölgesi', '🔵 Option A: Landing Site');
+        setTxt('lblDateA', '🔵 Seçenek A: Tarih & Saat (UTC)', '🔵 Option A: Date & Time (UTC)');
+        setTxt('lblDuration', '⏱️ Görev Süresi', '⏱️ Mission Duration');
+        setTxt('optDur7', '7 Dünya Günü', '7 Earth Days');
+        setTxt('optDur14', '14 Dünya Günü (1 Ay Gündüzü)', '14 Earth Days (1 Lunar Day)');
+        setTxt('optDur28', '28 Dünya Günü (Tam Döngü)', '28 Earth Days (Full Cycle)');
+        setTxt('lblSiteB', '🟠 Seçenek B: Alternatif Bölge', '🟠 Option B: Alternative Site');
+        setTxt('lblDateB', '🟠 Seçenek B: Tarih & Saat (UTC)', '🟠 Option B: Date & Time (UTC)');
+        setTxt('btnRunSim', 'Simülasyonu Güncelle', 'Update Simulation');
+        setTxt('lblCustomLat', 'Özel Enlem (-80.1° ile -89.9° Güney)', 'Custom Latitude (-80.1° to -89.9° South)');
+        setTxt('lblCustomLon', 'Özel Boylam (0° ile 360° Doğu)', 'Custom Longitude (0° to 360° East)');
+        setTxt('lblCustomTip', 'İpucu: Sol 3D harita yüzeyinde herhangi bir noktaya tıklayarak da özel koordinat seçebilirsiniz.', 'Tip: Click anywhere on the 3D South Pole map surface on the left to pick a custom coordinate.');
+
+        setTxt('mapBoxTitle', 'Gerçek 3D Ay Güney Kutbu Topografya & Krater Haritası', 'Real 3D Lunar South Pole Topography & Crater Map');
+        setHtml('mapBoxSub', 'Hazır görev noktalarına veya <strong>yüzeydeki herhangi bir özel noktaya</strong> tıklayarak LOLA analizi yapın.', 'Click any preset mission marker or <strong>any point on the 3D surface</strong> for real-time LOLA ray-casting.');
+        setTxt('btnMapOrbit', MAP_ORBIT_TIMER ? '⏸ Turu Durdur' : '🔄 360° Tur', MAP_ORBIT_TIMER ? '⏸ Stop Orbit' : '🔄 360° Orbit');
+        setTxt('btnThemeRegolith', '🌕 Gerçekçi Ay', '🌕 Realistic Moon');
+        setTxt('btnThemeTopo', '🌈 NASA Topo (DEM)', '🌈 NASA Topo (DEM)');
+        setTxt('btnThemeIce', '❄️ PSR Buz & Termal', '❄️ PSR Ice & Thermal');
+        setTxt('btnCamIso', '📐 3D Açı', '📐 3D Angle');
+        setTxt('btnCamTop', '🛰️ Üstten', '🛰️ Top-Down');
+        setTxt('btnCamLow', '🏔️ Ufuk', '🏔️ Horizon');
+        setTxt('mapLegA', 'Seçenek A', 'Option A');
+        setTxt('mapLegB', 'Seçenek B', 'Option B');
+        setTxt('mapLegCand', 'Aday Bölge', 'Candidate');
+        setTxt('mapLegPsr', 'PSR Su Buzu (40K)', 'PSR Water Ice (40K)');
+        setTxt('simBoxTitle', '3D Uzay & Krater Ufuk Simülasyonu (WebGL)', '3D Space & Crater Horizon Simulation (WebGL)');
+        setHtml('simBoxSub', 'Fareyle <strong>360° çevirin</strong>, tekerlekle yakınlaşın: Gerçek LOLA krater dağları, Güneş ışığı ve Dünya lazer hattını izleyin.', '<strong>Rotate 360°</strong> with mouse & zoom: Inspect real LOLA crater mountains, sunlight, and Earth laser telemetry.');
+        setTxt('btnSimLander', '🤖 İniş Aracı', '🤖 Lander');
+        setTxt('viewBtn', SpaceSim.fpv ? '🛰 Yörünge Görünümü' : '👁 Astronot Görünümü', SpaceSim.fpv ? '🛰 Orbit View' : '👁 Astronaut View');
+        setHtml('legSun', '<b style="color:#facc15;">●</b> Güneş Yörüngesi', '<b style="color:#facc15;">●</b> Sun Trajectory');
+        setHtml('legEarth', '<b style="color:#4ade80;">●</b> Dünya Yörüngesi', '<b style="color:#4ade80;">●</b> Earth Trajectory');
+        setHtml('legBeam', '<b style="color:#38bdf8;">---</b> Telemetri Işını', '<b style="color:#38bdf8;">---</b> Telemetry Beam');
+        setTxt('playBtn', ANIM_TIMER ? '⏸ Durdur' : '▶ Oynat', ANIM_TIMER ? '⏸ Pause' : '▶ Play');
+
+        setTxt('tlBoxTitle', 'Görev Boyunca Enerji ve İletişim Takvimi', 'Mission Power & Communication Timeline');
+        setHtml('tlBoxSub', 'Üstte <strong>Güneş Şarjı, Dünya Bağlantısı ve Görev Modu</strong> şeritleri; altta ise <strong>Güneş/Dünya yükselme açısı ile krater ufuk engeli (°)</strong> gösterilir. Herhangi bir saate tıklayarak 3D simülasyonu o ana getirebilirsiniz.', 'Top strips show <strong>Solar Charge, Earth Link, and Mission Mode</strong>; bottom chart plots <strong>Sun/Earth elevation vs. crater horizon (°)</strong>. Click any hour to jump in 3D.');
+        setTxt('csvBtn', '⬇ CSV Telemetri İndir', '⬇ Download CSV Telemetry');
+        setTxt('cmpBoxTitle', 'İki Seçenek Arasında Hızlı Karar Karşılaştırması', 'Side-by-Side Rapid Mission Decision Comparison');
+        setTxt('cmpBoxSub', 'Bölge, tarih veya saat değişikliğinin görevin uygulanabilirliğine etkisini ve kazanan metrikleri yan yana kıyaslayın.', 'Compare how site, date, or time changes impact mission feasibility and winning metrics side by side.');
+
+        setTxt('mascotHdrTitle', '🤖 LUNA — AI Görev Maskotu', '🤖 LUNA — AI Mission Mascot');
+        setTxt('btnPickMascot', '🖼️ Maskot Seç', '🖼️ Pick Mascot');
+        setTxt('btnAskMascot', 'Sor', 'Ask');
+        setTxt('tabTitleOverview', '1. 3D Simülasyon & Özet', '1. 3D Simulation & Summary');
+        setTxt('tabTitleTimeline', '2. Saatlik Enerji & İletişim Takvimi', '2. Hourly Power & Comm Timeline');
+        setTxt('tabTitleCompare', '3. A vs. B Karşılaştırma Tablosu', '3. A vs. B Decision Matrix');
+        setTxt('tabTitleAi', '4. LUNA Yapay Zeka Raporu', '4. LUNA AI Mission Report');
+        const askInp = document.getElementById('mascotAskInput');
+        if (askInp) askInp.placeholder = en ? "Ask LUNA: e.g. Why is Option B safer?" : "LUNA'ya sor: Örn. Neden B daha güvenli?";
+        const selA = document.getElementById('siteA');
+        if (selA && selA.options.length > 0) {
+            const lastOpt = selA.options[selA.options.length - 1];
+            if (lastOpt && lastOpt.value === 'custom') {
+                lastOpt.text = en ? "📍 Enter Custom Lunar Coordinates (Lat / Lon)..." : "📍 Özel Ay Koordinatı Gir (Lat / Lon)...";
+            }
+        }
+
+        if (CURRENT_DATA_A && CURRENT_DATA_B) {
+            renderDashboard(CURRENT_DATA_A, CURRENT_DATA_B);
+        }
+    }
+
+    function setViewMode(mode) {
+        VIEW_MODE = mode;
+        document.getElementById('btnEng').classList.toggle('active', mode === 'eng');
+        document.getElementById('btnEdu').classList.toggle('active', mode === 'edu');
+        document.getElementById('eduBox').style.display = mode === 'edu' ? 'block' : 'none';
+        document.getElementById('csvBtn').style.display = mode === 'eng' ? 'inline-block' : 'none';
+        if (CURRENT_DATA_A && CURRENT_DATA_B) {
+            requestGeminiComment(CURRENT_DATA_A, CURRENT_DATA_B, '', false);
+        }
+    }
+
+    function toggleCustomBar() {
+        const isCustom = document.getElementById('siteA').value === 'custom';
+        document.getElementById('customCoordBar').style.display = isCustom ? 'grid' : 'none';
+    }
+
+    function applyScenarioPreset(presetId, btnEl) {
+        document.querySelectorAll('.scenario-chip').forEach(el => el.classList.remove('active'));
+        if (btnEl) btnEl.classList.add('active');
+
+        const selA = document.getElementById('siteA');
+        const selB = document.getElementById('siteB');
+        const dateA = document.getElementById('dateA');
+        const timeA = document.getElementById('timeA');
+        const dateB = document.getElementById('dateB');
+        const timeB = document.getElementById('timeB');
+        const dur = document.getElementById('duration');
+
+        if (presetId === 'delay') {
+            selA.value = 'shackleton_rim';
+            dateA.value = '2026-11-15';
+            timeA.value = '06:00';
+            selB.value = 'shackleton_rim';
+            dateB.value = '2026-11-22';
+            timeB.value = '06:00';
+            dur.value = '14';
+            setViewMode('eng');
+        } else if (presetId === 'topography') {
+            selA.value = 'custom';
+            document.getElementById('customLat').value = '-88.80';
+            document.getElementById('customLon').value = '125.00';
+            dateA.value = '2026-11-15';
+            timeA.value = '06:00';
+            selB.value = 'shackleton_rim';
+            dateB.value = '2026-11-15';
+            timeB.value = '06:00';
+            dur.value = '14';
+            setViewMode('eng');
+        } else if (presetId === 'international') {
+            selA.value = 'change_7_shackleton';
+            dateA.value = '2026-11-15';
+            timeA.value = '06:00';
+            selB.value = 'nobile_rim_1';
+            dateB.value = '2026-11-15';
+            timeB.value = '06:00';
+            dur.value = '14';
+            setViewMode('eng');
+        } else if (presetId === 'apollo_edu') {
+            selA.value = 'shackleton_rim';
+            dateA.value = '2026-11-15';
+            timeA.value = '06:00';
+            selB.value = 'apollo_11_equator';
+            dateB.value = '2026-11-15';
+            timeB.value = '06:00';
+            dur.value = '14';
+            setViewMode('edu');
+        }
+        toggleCustomBar();
+        runSimulation();
+    }
+
+    async function init() {
+        loadSavedMascot();
+        SpaceSim.init();
+        const res = await fetch('/api/terrain3d');
+        REAL_TERRAIN = await res.json();
+        document.getElementById('sourceBadge').textContent = REAL_TERRAIN.source;
+
+        const selA = document.getElementById('siteA');
+        const selB = document.getElementById('siteB');
+
+        Object.values(REAL_TERRAIN.sites).forEach((s, idx) => {
+            selA.add(new Option(s.name, s.id, idx === 0, idx === 0));
+            selB.add(new Option(s.name, s.id, s.id === 'nobile_rim_1', s.id === 'nobile_rim_1'));
+        });
+        selA.add(new Option("📍 Özel Ay Koordinatı Gir (Lat / Lon)...", "custom"));
+        try {
+            const savedLang = localStorage.getItem('lunar_lang');
+            if (savedLang === 'en') setLanguage('en');
+        } catch (_) {}
+        runSimulation();
+    }
+
+    function getBadge(status) {
+        const isEn = (typeof LANG !== 'undefined' && LANG === 'en');
+        if (status.startsWith('GO')) return `<span class="badge badge-go">${isEn ? 'GO (FEASIBLE)' : 'UYGUN (GO)'}</span>`;
+        if (status.startsWith('CAUTION')) return `<span class="badge badge-caution">${isEn ? 'CAUTION (BATTERY / SLOPE)' : 'DİKKAT (BATARYA / EĞİM)'}</span>`;
+        return `<span class="badge badge-nogo">${isEn ? 'NO-GO (HIGH RISK)' : 'RİSKLİ (NO-GO)'}</span>`;
+    }
+
+    let ACTIVE_FETCH_CTRL = null;
+
+    async function runSimulation() {
+        stopAnimation();
+        if (ACTIVE_FETCH_CTRL) ACTIVE_FETCH_CTRL.abort();
+        const ctrl = new AbortController();
+        ACTIVE_FETCH_CTRL = ctrl;
+
+        const loader = document.getElementById('loader');
+        loader.style.display = 'block';
+
+        const siteA = document.getElementById('siteA').value;
+        const dateA = document.getElementById('dateA').value;
+        const timeA = document.getElementById('timeA').value || "00:00";
+        const siteB = document.getElementById('siteB').value;
+        const dateB = document.getElementById('dateB').value;
+        const timeB = document.getElementById('timeB').value || "00:00";
+        const duration = document.getElementById('duration').value;
+
+        let url = `/api/compare?site_a=${siteA}&date_a=${dateA}&time_a=${timeA}&site_b=${siteB}&date_b=${dateB}&time_b=${timeB}&duration_days=${duration}`;
+        if (siteA === 'custom') {
+            const cLat = document.getElementById('customLat').value;
+            const cLon = document.getElementById('customLon').value;
+            url += `&custom_lat=${cLat}&custom_lon=${cLon}`;
+        }
+
+        try {
+            const res = await fetch(url, { signal: ctrl.signal });
+            if (!res.ok) {
+                const errTxt = await res.text();
+                let errMsg = errTxt;
+                try {
+                    const errJson = JSON.parse(errTxt);
+                    if (errJson && errJson.detail) errMsg = errJson.detail;
+                } catch (_) {}
+                throw new Error(`HTTP ${res.status}: ${errMsg}`);
+            }
+            const data = await res.json();
+            CURRENT_DATA_A = data.site_a;
+            CURRENT_DATA_B = data.site_b;
+            renderDashboard(data.site_a, data.site_b);
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            alert("Veri çekilirken hata oluştu: " + (err.message || err));
+        } finally {
+            if (ACTIVE_FETCH_CTRL === ctrl) {
+                loader.style.display = 'none';
+                ACTIVE_FETCH_CTRL = null;
+            }
+        }
+    }
+
+    let MAP_THEME = 'regolith';
+    let MAP_ORBIT_TIMER = null;
+    let MAP_ORBIT_ANGLE = -0.78;
+    let MAP_CAMERA_EYE = { x: 0.90, y: -0.90, z: 0.62 };
+
+    function setMapTheme(theme) {
+        MAP_THEME = theme || 'regolith';
+        ['Regolith', 'Topo', 'Ice'].forEach(k => {
+            const btn = document.getElementById('btnTheme' + k);
+            if (btn) btn.classList.toggle('active', k.toLowerCase() === MAP_THEME);
+        });
+        if (CURRENT_DATA_A && CURRENT_DATA_B) {
+            renderLunar3DMap(CURRENT_DATA_A.site, CURRENT_DATA_B.site.id);
+        }
+    }
+
+    function setMapCamera(mode) {
+        stopMapTurntable();
+        if (mode === 'top') {
+            MAP_CAMERA_EYE = { x: 0.01, y: -0.08, z: 1.85 };
+        } else if (mode === 'low') {
+            MAP_CAMERA_EYE = { x: 1.08, y: -1.08, z: 0.28 };
+        } else {
+            MAP_CAMERA_EYE = { x: 0.90, y: -0.90, z: 0.62 };
+        }
+        try {
+            Plotly.relayout('lunar3dMap', {
+                'scene.camera': { eye: MAP_CAMERA_EYE, center: { x: 0, y: 0, z: -0.04 } }
+            });
+        } catch (_) {}
+    }
+
+    function stopMapTurntable() {
+        if (MAP_ORBIT_TIMER) {
+            clearInterval(MAP_ORBIT_TIMER);
+            MAP_ORBIT_TIMER = null;
+        }
+        const btn = document.getElementById('btnMapOrbit');
+        if (btn) {
+            btn.classList.remove('active');
+            btn.textContent = (LANG === 'en') ? '🔄 360° Orbit' : '🔄 360° Tur';
+        }
+    }
+
+    function toggleMapTurntable() {
+        if (MAP_ORBIT_TIMER) {
+            stopMapTurntable();
+            return;
+        }
+        const btn = document.getElementById('btnMapOrbit');
+        if (btn) {
+            btn.classList.add('active');
+            btn.textContent = (LANG === 'en') ? '⏸ Stop Orbit' : '⏸ Turu Durdur';
+        }
+        const r = 1.26;
+        MAP_ORBIT_TIMER = setInterval(() => {
+            MAP_ORBIT_ANGLE += 0.028;
+            MAP_CAMERA_EYE = {
+                x: Math.cos(MAP_ORBIT_ANGLE) * r,
+                y: Math.sin(MAP_ORBIT_ANGLE) * r,
+                z: 0.56 + 0.08 * Math.sin(MAP_ORBIT_ANGLE * 0.5)
+            };
+            try {
+                Plotly.relayout('lunar3dMap', {
+                    'scene.camera': { eye: MAP_CAMERA_EYE, center: { x: 0, y: 0, z: -0.04 } }
+                });
+            } catch (_) {}
+        }, 55);
+    }
+
+    function renderLunar3DMap(siteAObj, activeIdB) {
+        if (!REAL_TERRAIN) return;
+        const en = (LANG === 'en');
+
+        const axisKm = REAL_TERRAIN.terrain_3d.axis_km;
+        const zKm = REAL_TERRAIN.terrain_3d.z_km;
+        const sitesArr = Object.values(REAL_TERRAIN.sites);
+        const siteBObj = (CURRENT_DATA_B && CURRENT_DATA_B.site) ? CURRENT_DATA_B.site : (REAL_TERRAIN.sites[activeIdB] || null);
+
+        // Güneş açısına göre gerçekçi dinamik 3D gölgeleme yönü
+        let sunAzRad = -0.7;
+        if (CURRENT_DATA_A && CURRENT_DATA_A.timeline && CURRENT_DATA_A.timeline.length > 0) {
+            const sliderIdx = parseInt((document.getElementById('timeSlider') || {}).value || '0') || 0;
+            const fr = CURRENT_DATA_A.timeline[Math.min(sliderIdx, CURRENT_DATA_A.timeline.length - 1)];
+            if (fr && fr.sun_az !== undefined) sunAzRad = (fr.sun_az * Math.PI) / 180.0;
+        }
+        const lightPos = {
+            x: Math.cos(sunAzRad) * 2400,
+            y: Math.sin(sunAzRad) * 2400,
+            z: 310
+        };
+
+        const palettes = {
+            regolith: [
+                [0.00, '#020617'],
+                [0.14, '#082f49'],
+                [0.28, '#1e293b'],
+                [0.46, '#334155'],
+                [0.64, '#64748b'],
+                [0.82, '#94a3b8'],
+                [0.93, '#cbd5e1'],
+                [1.00, '#f8fafc']
+            ],
+            topo: [
+                [0.00, '#0c1445'],
+                [0.18, '#0369a1'],
+                [0.36, '#0d9488'],
+                [0.54, '#22c55e'],
+                [0.72, '#eab308'],
+                [0.88, '#f97316'],
+                [1.00, '#fef08a']
+            ],
+            ice: [
+                [0.00, '#06b6d4'],
+                [0.16, '#0891b2'],
+                [0.30, '#0f172a'],
+                [0.52, '#1e293b'],
+                [0.72, '#475569'],
+                [0.88, '#eab308'],
+                [1.00, '#fef08a']
+            ]
+        };
+
+        const surfaceTrace = {
+            type: 'surface',
+            x: axisKm,
+            y: axisKm,
+            z: zKm,
+            colorscale: palettes[MAP_THEME] || palettes.regolith,
+            showscale: MAP_THEME === 'topo',
+            colorbar: {
+                title: { text: 'km', font: { size: 10, color: '#94a3b8' } },
+                tickfont: { size: 9, color: '#94a3b8' },
+                thickness: 10,
+                len: 0.55,
+                x: 0.96,
+                y: 0.5
+            },
+            lighting: { ambient: 0.25, diffuse: 0.96, specular: 0.32, roughness: 0.46, fresnel: 0.45 },
+            lightposition: lightPos,
+            contours: {
+                x: { show: true, color: 'rgba(56,189,248,0.06)', width: 1 },
+                y: { show: true, color: 'rgba(56,189,248,0.06)', width: 1 },
+                z: { show: true, usecolormap: false, color: 'rgba(148,163,184,0.20)', width: 1, highlight: true, highlightcolor: '#38bdf8' }
+            },
+            hovertemplate: en
+                ? '<b>Lunar South Pole LOLA DEM</b><br>X: %{x:.1f} km | Y: %{y:.1f} km<br>Elevation: <b>%{z:.2f} km</b><br><i>Click to land at this exact point</i><extra></extra>'
+                : '<b>Ay Güney Kutbu LOLA DEM</b><br>X: %{x:.1f} km | Y: %{y:.1f} km<br>Rakım: <b>%{z:.2f} km</b><br><i>Buraya özel iniş yapmak için tıklayın</i><extra></extra>'
+        };
+
+        const shortNames = {
+            shackleton_rim: 'Shackleton Rim',
+            connecting_ridge: 'Connecting Ridge',
+            malapert_massif: 'Malapert Massif',
+            nobile_rim_1: 'Nobile Rim 1',
+            faustini_rim_a: 'Faustini Rim',
+            mons_mouton: 'Mons Mouton',
+            haworth_rim: 'Haworth Rim',
+            change_7_shackleton: en ? "Chang'e-7" : "Chang'e-7 (Çin)",
+            lupex_de_gerlache: 'LUPEX de Gerlache'
+        };
+
+        // Çakışmaları önlemek için her bölgeye özel dikey lazer sütun yüksekliği ve radyal etiket kaydırması
+        const stemHeightMap = {
+            shackleton_rim: 2.35,
+            change_7_shackleton: 1.25,
+            connecting_ridge: 1.75,
+            haworth_rim: 1.55,
+            lupex_de_gerlache: 1.50,
+            faustini_rim_a: 1.50,
+            malapert_massif: 1.65,
+            nobile_rim_1: 1.65,
+            mons_mouton: 1.65
+        };
+        const xyJitterMap = {
+            shackleton_rim: [0.0, 0.0],
+            change_7_shackleton: [6.5, 7.5],
+            connecting_ridge: [-8.0, -8.5]
+        };
+
+        const ptsX = [], ptsY = [], ptsZ = [], texts = [], hoverNames = [], ids = [], colors = [], sizes = [], symbols = [];
+        const stemX = [], stemY = [], stemZ = [];
+
+        const addSitePin = (s, isCustomObj = false) => {
+            const isA = isCustomObj ? true : (s.id === siteAObj.id);
+            const isB = !isCustomObj && (s.id === activeIdB);
+            const jit = isCustomObj ? [0, 0] : (xyJitterMap[s.id] || [0, 0]);
+            const px = s.x_km + jit[0];
+            const py = s.y_km + jit[1];
+            const baseZ = s.elevation_km;
+            let stemH = isCustomObj ? 2.45 : (stemHeightMap[s.id] || 1.45);
+            if (isA) stemH = Math.max(stemH, 2.35);
+            else if (isB) stemH = Math.max(stemH, 1.95);
+
+            const topZ = baseZ + stemH;
+
+            // Dikey 3D lazer sütunu (yüzeyden tepe işaretçisine)
+            stemX.push(s.x_km, px, null);
+            stemY.push(s.y_km, py, null);
+            stemZ.push(baseZ, topZ, null);
+
+            ptsX.push(px);
+            ptsY.push(py);
+            ptsZ.push(topZ);
+
+            const baseLabel = isCustomObj
+                ? (en ? `📍 Custom (${s.lat.toFixed(1)}°S)` : `📍 Özel (${s.lat.toFixed(1)}°S)`)
+                : (shortNames[s.id] || s.name.split(': ').pop().split(' (')[0]);
+
+            if (isA && isB) {
+                texts.push(`🔵🟠 A&B: ${baseLabel}`);
+                colors.push('#38bdf8');
+                sizes.push(11.5);
+                symbols.push('diamond');
+            } else if (isA) {
+                texts.push(`🔵 A: ${baseLabel}`);
+                colors.push('#38bdf8');
+                sizes.push(11);
+                symbols.push('circle');
+            } else if (isB) {
+                texts.push(`🟠 B: ${baseLabel}`);
+                colors.push('#fb923c');
+                sizes.push(10);
+                symbols.push('circle');
+            } else {
+                // Seçili olmayan sarı aday bölgelerde kalıcı yazı kirliliğini önle (detaylar fareyle üzerine gelince kutuda açılır)
+                texts.push('');
+                colors.push('#facc15');
+                sizes.push(6.5);
+                symbols.push('circle');
+            }
+
+            hoverNames.push(`${s.name}<br>${en ? 'Elev' : 'Rakım'}: ${s.elevation_km} km | ${en ? 'Slope' : 'Eğim'}: ${s.slope_deg}°`);
+            ids.push(isCustomObj ? 'custom' : s.id);
+        };
+
+        sitesArr.forEach(s => {
+            if (s.is_equatorial || s.is_subpolar || Math.abs(s.x_km) > 165 || Math.abs(s.y_km) > 165) return;
+            addSitePin(s, false);
+        });
+
+        if (siteAObj.id === 'custom' && !siteAObj.is_equatorial && !siteAObj.is_subpolar) {
+            addSitePin(siteAObj, true);
+        }
+
+        // 3D Dikey Lazer Sütunları (Pin Stems)
+        const stemsTrace = {
+            type: 'scatter3d',
+            mode: 'lines',
+            x: stemX,
+            y: stemY,
+            z: stemZ,
+            line: { color: 'rgba(125, 211, 252, 0.65)', width: 3.5 },
+            hoverinfo: 'skip'
+        };
+
+        // Yüzeyde Seçenek A ve Seçenek B için 3D Halka (Landing Ellipse Halo)
+        const makeRingTrace = (siteObj, colorHex, labelStr) => {
+            if (!siteObj || siteObj.is_equatorial || siteObj.is_subpolar || Math.abs(siteObj.x_km) > 165 || Math.abs(siteObj.y_km) > 165) return null;
+            const rx = [], ry = [], rz = [];
+            const rad = 10.5;
+            for (let i = 0; i <= 28; i++) {
+                const ang = (i / 28) * Math.PI * 2;
+                rx.push(siteObj.x_km + Math.cos(ang) * rad);
+                ry.push(siteObj.y_km + Math.sin(ang) * rad);
+                rz.push(siteObj.elevation_km + 0.22);
+            }
+            return {
+                type: 'scatter3d',
+                mode: 'lines',
+                x: rx, y: ry, z: rz,
+                line: { color: colorHex, width: 5 },
+                name: labelStr,
+                hoverinfo: 'skip'
+            };
+        };
+
+        // Seçenek A ve Seçenek B Arasında 3D Jeodezik Karşılaştırma Yayı (Arc)
+        let arcTrace = null;
+        let distKmAB = null;
+        if (siteAObj && siteBObj && !siteAObj.is_equatorial && !siteAObj.is_subpolar && !siteBObj.is_equatorial && !siteBObj.is_subpolar) {
+            distKmAB = Math.hypot(siteAObj.x_km - siteBObj.x_km, siteAObj.y_km - siteBObj.y_km);
+            if (distKmAB > 1.5 && distKmAB < 320) {
+                const ax = [], ay = [], az = [];
+                const peakZ = Math.max(siteAObj.elevation_km, siteBObj.elevation_km) + 3.2 + Math.min(4.0, distKmAB * 0.02);
+                for (let i = 0; i <= 24; i++) {
+                    const t = i / 24;
+                    ax.push(siteAObj.x_km * (1 - t) + siteBObj.x_km * t);
+                    ay.push(siteAObj.y_km * (1 - t) + siteBObj.y_km * t);
+                    const linZ = (siteAObj.elevation_km + 1.8) * (1 - t) + (siteBObj.elevation_km + 1.8) * t;
+                    const arch = Math.sin(t * Math.PI) * (peakZ - linZ);
+                    az.push(linZ + arch);
+                }
+                arcTrace = {
+                    type: 'scatter3d',
+                    mode: 'lines',
+                    x: ax, y: ay, z: az,
+                    line: { color: '#38bdf8', width: 4, dash: 'dash' },
+                    hovertemplate: `<b>A ↔ B ${en ? 'Spatial Distance' : 'Yüzey Mesafesi'}: ${distKmAB.toFixed(1)} km</b><extra></extra>`
+                };
+            }
+        }
+
+        // Bilimsel Kalıcı Gölge Bölgeleri (Permanently Shadowed Regions - PSR Su Buzu Rezervleri)
+        const psrTrace = {
+            type: 'scatter3d',
+            mode: 'markers',
+            x: [-0.4, 24.0, 38.0, -3.0, -19.5],
+            y: [-0.6, 82.0, 48.0, 62.0, -14.0],
+            z: [-3.7, -2.0, -2.3, -2.7, -2.5],
+            text: [
+                "❄️ Shackleton PSR (40 K / -233°C)",
+                "❄️ Faustini PSR (Su Buzu)",
+                "❄️ Shoemaker PSR (Su Buzu)",
+                "❄️ Haworth PSR (Su Buzu)",
+                "❄️ de Gerlache PSR (Su Buzu)"
+            ],
+            marker: { symbol: 'diamond', color: '#06b6d4', size: 6.5, line: { color: '#cffafe', width: 1.5 } },
+            hovertemplate: en
+                ? '<b>%{text}</b><br>Permanently Shadowed Region (PSR)<br>Temp: ~40 K (-233°C)<br>Resource: Water Ice Cold Trap<extra></extra>'
+                : '<b>%{text}</b><br>Kalıcı Gölge Bölgesi (PSR)<br>Sıcaklık: ~40 K (-233°C)<br>Kaynak: Milyarlarca Ton Su Buzu Rezervi<extra></extra>'
+        };
+
+        const markersTrace = {
+            type: 'scatter3d',
+            mode: 'markers+text',
+            x: ptsX,
+            y: ptsY,
+            z: ptsZ,
+            text: texts,
+            hovertext: hoverNames,
+            customdata: ids,
+            textposition: 'top center',
+            textfont: { color: '#f8fafc', size: 10.5, family: 'Segoe UI, sans-serif' },
+            marker: { symbol: symbols, color: colors, size: sizes, line: { color: '#090d16', width: 2 } },
+            hovertemplate: '<b>%{hovertext}</b><br>Konum: (%{x:.1f} km, %{y:.1f} km)<extra></extra>'
+        };
+
+        const traces = [surfaceTrace, psrTrace, stemsTrace];
+        const ringA = makeRingTrace(siteAObj, '#38bdf8', 'Option A Ring');
+        const ringB = makeRingTrace(siteBObj, '#fb923c', 'Option B Ring');
+        if (ringA) traces.push(ringA);
+        if (ringB) traces.push(ringB);
+        if (arcTrace) traces.push(arcTrace);
+        traces.push(markersTrace);
+
+        // Üst HUD rozetlerini ve alt mesafe bilgisini güncelle
+        const shortA = shortNames[siteAObj.id] || siteAObj.name.split(': ').pop().split(' (')[0];
+        const hudA = document.getElementById('mapHudSiteA');
+        if (hudA) hudA.innerHTML = `<b style="color:#38bdf8;">🔵 A:</b> ${shortA} <span style="color:#94a3b8;">(${siteAObj.elevation_km} km | ${siteAObj.slope_deg}°)</span>`;
+        if (siteBObj) {
+            const shortB = shortNames[siteBObj.id] || siteBObj.name.split(': ').pop().split(' (')[0];
+            const hudB = document.getElementById('mapHudSiteB');
+            if (hudB) hudB.innerHTML = `<b style="color:#fb923c;">🟠 B:</b> ${shortB} <span style="color:#94a3b8;">(${siteBObj.elevation_km} km | ${siteBObj.slope_deg}°)</span>`;
+        }
+        const hudDist = document.getElementById('mapHudDist');
+        if (hudDist) {
+            hudDist.textContent = distKmAB !== null
+                ? `A↔B: ${distKmAB.toFixed(1)} km`
+                : (en ? 'A↔B: Global / Equator' : 'A↔B: Küresel / Ekvator');
+        }
+
+        Plotly.newPlot('lunar3dMap', traces, {
+            paper_bgcolor: 'transparent',
+            showlegend: false,
+            margin: { t: 0, r: 0, b: 0, l: 0 },
+            scene: {
+                bgcolor: 'rgba(0,0,0,0)',
+                aspectmode: 'manual',
+                aspectratio: { x: 1, y: 1, z: 0.44 },
+                xaxis: { title: { text: en ? 'Earth Direction (km)' : 'Dünya Yönü (km)', font: { size: 10, color: '#64748b' } }, tickfont: { size: 8.5, color: '#475569' }, gridcolor: 'rgba(30,41,59,0.65)', zerolinecolor: '#1e293b', showbackground: false },
+                yaxis: { title: { text: en ? 'East-West (km)' : 'Doğu-Batı (km)', font: { size: 10, color: '#64748b' } }, tickfont: { size: 8.5, color: '#475569' }, gridcolor: 'rgba(30,41,59,0.65)', zerolinecolor: '#1e293b', showbackground: false },
+                zaxis: { title: { text: en ? 'Elevation (km)' : 'Rakım (km)', font: { size: 10, color: '#64748b' } }, tickfont: { size: 8.5, color: '#475569' }, gridcolor: 'rgba(30,41,59,0.65)', zerolinecolor: '#1e293b', showbackground: false },
+                camera: { eye: MAP_CAMERA_EYE, center: { x: 0, y: 0, z: -0.04 } }
+            }
+        }, { displayModeBar: false, responsive: true });
+
+        const mapEl = document.getElementById('lunar3dMap');
+        if (mapEl && !mapEl._stopOrbitBound) {
+            mapEl.addEventListener('mousedown', () => { if (MAP_ORBIT_TIMER) stopMapTurntable(); });
+            mapEl._stopOrbitBound = true;
+        }
+        mapEl.removeAllListeners && mapEl.removeAllListeners('plotly_click');
+        mapEl.on('plotly_click', function(data) {
+            const pt = data.points[0];
+            if (!pt) return;
+            if (pt.customdata && pt.customdata !== 'custom') {
+                document.getElementById('siteA').value = pt.customdata;
+                toggleCustomBar();
+                runSimulation();
+            } else if (pt.x !== undefined && pt.y !== undefined) {
+                const rKm = Math.hypot(pt.x, pt.y);
+                const lat = -90.0 + (rKm / 30.323);
+                let lon = (Math.atan2(pt.y, pt.x) * 180.0) / Math.PI;
+                if (lon < 0) lon += 360.0;
+                document.getElementById('siteA').value = 'custom';
+                document.getElementById('customLat').value = lat.toFixed(2);
+                document.getElementById('customLon').value = lon.toFixed(2);
+                toggleCustomBar();
+                runSimulation();
+            }
+        });
+    }
+
+    function onSliderMove(val) {
+        if (!CURRENT_DATA_A) return;
+        SpaceSim.setFrame(CURRENT_DATA_A.timeline[parseInt(val)]);
+    }
+
+    let ANIM_SPEED = 1;
+
+    function setAnimSpeed(mult) {
+        ANIM_SPEED = mult || 1;
+        [1, 2, 4].forEach(m => {
+            const b = document.getElementById('spd' + m + 'x');
+            if (b) b.classList.toggle('active', m === ANIM_SPEED);
+        });
+        if (ANIM_TIMER) {
+            stopAnimation();
+            togglePlay();
+        }
+    }
+
+    function stopAnimation() {
+        if (ANIM_TIMER) { clearInterval(ANIM_TIMER); ANIM_TIMER = null; }
+        const btn = document.getElementById('playBtn');
+        if (btn) btn.textContent = (LANG === 'en') ? "▶ Play" : "▶ Oynat";
+    }
+
+    function togglePlay() {
+        if (!CURRENT_DATA_A) return;
+        if (ANIM_TIMER) { stopAnimation(); return; }
+        document.getElementById('playBtn').textContent = (LANG === 'en') ? "⏸ Pause" : "⏸ Durdur";
+        const slider = document.getElementById('timeSlider');
+        const intervalMs = Math.max(25, Math.round(115 / ANIM_SPEED));
+        ANIM_TIMER = setInterval(() => {
+            let next = parseInt(slider.value) + 1;
+            if (next >= CURRENT_DATA_A.timeline.length) next = 0;
+            slider.value = next;
+            SpaceSim.setFrame(CURRENT_DATA_A.timeline[next]);
+        }, intervalMs);
+    }
+
+    function renderDashboard(a, b) {
+        const m = a.metrics;
+        const en = (LANG === 'en');
+        renderLunar3DMap(a.site, b.site.id);
+
+        // Three.js Gerçekçi 3D Sahneyi Güncelle
+        SpaceSim.updateSiteTerrain(a.site, a.timeline);
+        const slider = document.getElementById('timeSlider');
+        slider.max = a.timeline.length - 1;
+        slider.value = 0;
+        SpaceSim.setFrame(a.timeline[0]);
+
+        const sunsetText = m.sun_at_landing
+            ? (m.hours_to_sunset >= m.total_hours ? (en ? "Never sets during mission" : "Görev boyunca hiç batmıyor") : (en ? `First Sunset in: ${m.hours_to_sunset} hrs` : `İlk Gün Batımına: ${m.hours_to_sunset} saat`))
+            : (en ? `In shadow at landing (Sunrise in: ${m.hours_to_sunset} hrs)` : `İnişte gölgede (Doğuşa: ${m.hours_to_sunset} saat)`);
+
+        const earthsetText = m.earth_at_landing
+            ? (m.hours_to_earthset >= m.total_hours ? (en ? "Continuous link throughout mission" : "Görev boyunca kesintisiz açık") : (en ? `First Comm Loss in: ${m.hours_to_earthset} hrs` : `İlk İletişim Kesintisine: ${m.hours_to_earthset} saat`))
+            : (en ? `Blocked at landing (Link in: ${m.hours_to_earthset} hrs)` : `İnişte kesik (Bağlantıya: ${m.hours_to_earthset} saat)`);
+
+        const batteryAdvice = m.max_dark_streak_hours > 48
+            ? (en
+                ? `Because the spacecraft faces up to <strong>${m.max_dark_streak_hours} hours of continuous shadow</strong>, high-capacity batteries and thermal heaters are mandatory.`
+                : `Uzay aracı en fazla <strong>${m.max_dark_streak_hours} saat kesintisiz gölgede</strong> kalacağı için güçlü batarya ve termal ısıtıcı desteği şarttır.`)
+            : (en
+                ? `Maximum continuous shadow is <strong>${m.max_dark_streak_hours} hours</strong>, well within safe battery limits.`
+                : `Kesintisiz karanlık süresi <strong>${m.max_dark_streak_hours} saat</strong> ile güvenli sınırlar içindedir.`);
+
+        document.getElementById('summaryBanner').innerHTML = en ? `
+            <h2>Mission Assessment Summary: ${a.site.name} (Elevation: ${a.site.elevation_km} km | Slope: ${a.site.slope_deg}°)</h2>
+            <p>
+                For the <strong>${a.duration_days}-day</strong> mission starting <strong>${a.start_date} UTC</strong>, solar illumination is
+                <strong>${m.sun_visibility_pct}%</strong> (Avg Sun El: <strong>${m.avg_sun_elevation_deg}°</strong>) and
+                Direct-To-Earth comm is <strong>${m.earth_comm_pct}%</strong>. ${batteryAdvice}
+            </p>
+        ` : `
+            <h2>Görev Değerlendirme Özeti: ${a.site.name} (Rakım: ${a.site.elevation_km} km | Eğim: ${a.site.slope_deg}°)</h2>
+            <p>
+                <strong>${a.start_date} UTC</strong> başlangıçlı <strong>${a.duration_days} günlük</strong> görevde güneşlenme
+                <strong>%${m.sun_visibility_pct}</strong> (Ort. Güneş Açısı: <strong>${m.avg_sun_elevation_deg}°</strong>),
+                Dünya iletişimi <strong>%${m.earth_comm_pct}</strong> oranındadır. ${batteryAdvice}
+            </p>
+        `;
+
+        const scorePct = Math.max(4, Math.min(100, m.feasibility_score));
+        const sunPct = Math.max(4, Math.min(100, m.sun_visibility_pct));
+        const totalHrs = Math.max(24, (a.duration_days || 14) * 24);
+        const darkPct = Math.max(4, Math.min(100, (m.max_dark_streak_hours / totalHrs) * 100));
+        const earthPct = Math.max(4, Math.min(100, m.earth_comm_pct));
+        const icePct = m.psr_neighbor ? 92 : 35;
+
+        document.getElementById('kpiGrid').innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-title">${en ? 'OVERALL FEASIBILITY SCORE' : 'GENEL UYGUNLUK PUANI'}</div>
+                <div class="kpi-value" style="color: var(--accent)">${m.feasibility_score} / 100</div>
+                <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${scorePct}%; background:linear-gradient(90deg,#0284c7,#38bdf8); box-shadow:0 0 8px rgba(56,189,248,0.6);"></div></div>
+                <div class="kpi-sub">${getBadge(m.status)}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">${en ? 'SOLAR POWER & SUNSET' : 'GÜNEŞ ENERJİSİ & GÜN BATIMI'}</div>
+                <div class="kpi-value" style="color: var(--sun)">%${m.sun_visibility_pct}</div>
+                <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${sunPct}%; background:linear-gradient(90deg,#eab308,#facc15); box-shadow:0 0 8px rgba(250,204,21,0.6);"></div></div>
+                <div class="kpi-sub">${sunsetText}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">${en ? 'MAX CONTINUOUS SHADOW' : 'EN UZUN KARANLIK SÜRESİ'}</div>
+                <div class="kpi-value" style="color: var(--danger)">${m.max_dark_streak_hours} ${en ? 'Hrs' : 'Saat'}</div>
+                <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${darkPct}%; background:linear-gradient(90deg,#dc2626,#f87171); box-shadow:0 0 8px rgba(248,113,113,0.6);"></div></div>
+                <div class="kpi-sub">${en ? `Total ${m.sun_hours} hrs charging window` : `Toplam ${m.sun_hours} saat şarj penceresi`}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">${en ? 'EARTH COMM & BLACKOUT' : 'DÜNYA İLETİŞİMİ & BATIŞ'}</div>
+                <div class="kpi-value" style="color: var(--earth)">%${m.earth_comm_pct}</div>
+                <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${earthPct}%; background:linear-gradient(90deg,#16a34a,#4ade80); box-shadow:0 0 8px rgba(74,222,128,0.6);"></div></div>
+                <div class="kpi-sub">${earthsetText} | ~1.28s OWLT</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">${en ? 'WATER ICE & PSR RESERVE' : 'SU BUZU & PSR REZERVİ'}</div>
+                <div class="kpi-value" style="color: #38bdf8; font-size:1.35rem;">${m.psr_neighbor ? (en ? '❄️ High (PSR)' : '❄️ Yüksek') : (en ? 'Low / Regional' : 'Bölgesel / Kutup')}</div>
+                <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${icePct}%; background:linear-gradient(90deg,#0284c7,#7dd3fc); box-shadow:0 0 8px rgba(125,211,252,0.5);"></div></div>
+                <div class="kpi-sub-wrap" title="${m.water_ice_potential}">${m.water_ice_potential}</div>
+            </div>
+        `;
+
+        let bothHours = 0, partialHours = 0, blackoutHours = 0;
+        a.timeline.forEach(t => {
+            if (t.sun_visible && t.earth_visible) bothHours++;
+            else if (t.sun_visible || t.earth_visible) partialHours++;
+            else blackoutHours++;
+        });
+        const bothPct = ((bothHours / m.total_hours) * 100).toFixed(1);
+        const blackoutPct = ((blackoutHours / m.total_hours) * 100).toFixed(1);
+
+        document.getElementById('timelineLegendBar').innerHTML = `
+            <div style="background:#0b1120; border:1px solid rgba(250,204,21,0.35); border-left:4px solid #facc15; border-radius:8px; padding:8px 10px; font-size:0.80rem;">
+                <div style="color:#facc15; font-weight:700;">${en ? '☀️ Solar Power (Charge)' : '☀️ Güneş Enerjisi (Şarj)'}</div>
+                <div style="color:#f8fafc; margin-top:2px;"><strong>%${m.sun_visibility_pct}</strong> (${m.sun_hours} / ${m.total_hours} ${en ? 'hrs' : 'saat'})</div>
+                <div style="color:#94a3b8; font-size:0.74rem;">${en ? 'Yellow = Charging • Dark = Shadow' : 'Sarı = Şarj Açık • Koyu = Gölge'}</div>
+            </div>
+            <div style="background:#0b1120; border:1px solid rgba(74,222,128,0.35); border-left:4px solid #4ade80; border-radius:8px; padding:8px 10px; font-size:0.80rem;">
+                <div style="color:#4ade80; font-weight:700;">${en ? '🌍 Earth Link (DTE)' : '🌍 Dünya İletişimi (DTE)'}</div>
+                <div style="color:#f8fafc; margin-top:2px;"><strong>%${m.earth_comm_pct}</strong> (${m.earth_hours} / ${m.total_hours} ${en ? 'hrs' : 'saat'})</div>
+                <div style="color:#94a3b8; font-size:0.74rem;">${en ? 'Green = Linked • Dark = Blocked' : 'Yeşil = Bağlı • Koyu = Dağ Engeli'}</div>
+            </div>
+            <div style="background:#0b1120; border:1px solid rgba(56,189,248,0.35); border-left:4px solid #38bdf8; border-radius:8px; padding:8px 10px; font-size:0.80rem;">
+                <div style="color:#38bdf8; font-weight:700;">${en ? '🚀 Full Ops (Sun + Earth)' : '🚀 Tam Operasyon (Güneş + Dünya)'}</div>
+                <div style="color:#f8fafc; margin-top:2px;"><strong>%${bothPct}</strong> (${bothHours} ${en ? 'hrs full window' : 'saat kesintisiz fırsat'})</div>
+                <div style="color:#94a3b8; font-size:0.74rem;">${en ? `Blue = Both Open • Amber = Partial (${partialHours}h)` : `Mavi = İkisi de Açık • Sarı/Turuncu = Kısmi (${partialHours} sa)`}</div>
+            </div>
+            <div style="background:#0b1120; border:1px solid rgba(248,113,113,0.35); border-left:4px solid #ef4444; border-radius:8px; padding:8px 10px; font-size:0.80rem;">
+                <div style="color:#f87171; font-weight:700;">${en ? '⚠️ Critical Blackout / Shadow' : '⚠️ Kritik Kesinti / Gölge'}</div>
+                <div style="color:#f8fafc; margin-top:2px;"><strong>%${blackoutPct}</strong> ${en ? `full blackout (${blackoutHours} hrs)` : `tam kesinti (${blackoutHours} saat)`}</div>
+                <div style="color:#94a3b8; font-size:0.74rem;">${en ? `Max continuous shadow: ${m.max_dark_streak_hours} hrs` : `Maks. kesintisiz gölge: ${m.max_dark_streak_hours} saat`}</div>
+            </div>
+        `;
+
+        const times = a.timeline.map(t => t.datetime_utc);
+        const hoverTexts = a.timeline.map((t, i) => {
+            const modeLabel = (t.sun_visible && t.earth_visible)
+                ? (en ? '🚀 FULL OPS (Charge + Comm)' : '🚀 TAM OPERASYON (Şarj + İletişim)')
+                : (t.sun_visible ? (en ? '🔋 SUN ONLY (Comm Blocked)' : '🔋 YALNIZCA GÜNEŞ (İletişim Kesik)')
+                : (t.earth_visible ? (en ? '📡 COMM ONLY (Shadow / Battery)' : '📡 YALNIZCA İLETİŞİM (Gölge / Batarya)') : (en ? '🌑 FULL BLACKOUT (Shadow + No Comm)' : '🌑 TAM KESİNTİ (Gölge + İletişim Yok)')));
+            return `<b>${t.datetime_utc} UTC</b> (${en ? 'Hour' : 'Saat'} #${i})<br>` +
+                `${modeLabel}<br>` +
+                `☀️ ${en ? 'Sun' : 'Güneş'}: <b>${t.sun_visible ? (en ? `OPEN — Panel %${t.solar_power_pct}` : `AÇIK — Panel %${t.solar_power_pct}`) : (en ? 'SHADOW' : 'GÖLGEDE')}</b> (${t.sun_el.toFixed(1)}° / ${en ? 'Horizon' : 'Ufuk'} ${t.sun_horizon_limit.toFixed(1)}°)<br>` +
+                `🌍 ${en ? 'Earth' : 'Dünya'}: <b>${t.earth_visible ? (en ? 'LINKED (DTE)' : 'BAĞLI (DTE)') : (en ? 'BLOCKED' : 'KESİK')}</b> (${t.earth_el.toFixed(1)}° / ${en ? 'Horizon' : 'Ufuk'} ${t.earth_horizon_limit.toFixed(1)}°)`;
+        });
+
+        const lblSunRow = en ? '☀️ Solar Charge' : '☀️ Güneş Şarj';
+        const lblEarthRow = en ? '🌍 Earth Link' : '🌍 Dünya Hattı';
+        const lblModeRow = en ? '🚀 Mission Mode' : '🚀 Görev Modu';
+
+        const sunBar = {
+            x: times, y: a.timeline.map(() => lblSunRow), mode: 'markers', type: 'scatter',
+            showlegend: false, yaxis: 'y',
+            marker: { symbol: 'square', size: 13, color: a.timeline.map(t => t.sun_visible ? '#facc15' : '#273244') },
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+        const earthBar = {
+            x: times, y: a.timeline.map(() => lblEarthRow), mode: 'markers', type: 'scatter',
+            showlegend: false, yaxis: 'y',
+            marker: { symbol: 'square', size: 13, color: a.timeline.map(t => t.earth_visible ? '#4ade80' : '#273244') },
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+        const modeBar = {
+            x: times, y: a.timeline.map(() => lblModeRow), mode: 'markers', type: 'scatter',
+            showlegend: false, yaxis: 'y',
+            marker: {
+                symbol: 'square', size: 13,
+                color: a.timeline.map(t => (t.sun_visible && t.earth_visible) ? '#38bdf8' : ((t.sun_visible || t.earth_visible) ? '#f59e0b' : '#ef4444'))
+            },
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+
+        const sunElTrace = {
+            x: times, y: a.timeline.map(t => t.sun_el), name: en ? 'Sun Elevation (°)' : 'Güneş Açısı (°)',
+            type: 'scatter', mode: 'lines', yaxis: 'y2',
+            line: { color: '#facc15', width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(250,204,21,0.10)',
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+        const sunHorTrace = {
+            x: times, y: a.timeline.map(t => t.sun_horizon_limit), name: en ? 'Crater Horizon Limit (°)' : 'Güneş Krater Engeli (°)',
+            type: 'scatter', mode: 'lines', yaxis: 'y2',
+            line: { color: '#f87171', width: 1.5, dash: 'dash' },
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+        const earthElTrace = {
+            x: times, y: a.timeline.map(t => t.earth_el), name: en ? 'Earth Elevation (°)' : 'Dünya Açısı (°)',
+            type: 'scatter', mode: 'lines', yaxis: 'y2',
+            line: { color: '#4ade80', width: 1.8 },
+            hovertext: hoverTexts, hoverinfo: 'text'
+        };
+
+        Plotly.newPlot('timelineChart', [modeBar, earthBar, sunBar, sunElTrace, sunHorTrace, earthElTrace], {
+            paper_bgcolor: 'transparent', plot_bgcolor: '#0b1120', font: { color: '#e2e8f0' },
+            showlegend: true,
+            legend: {
+                orientation: 'h', x: 0.5, xanchor: 'center', y: 0.52, yanchor: 'middle',
+                bgcolor: 'rgba(15,23,42,0.85)', font: { size: 10, color: '#cbd5e1' }
+            },
+            hovermode: 'closest',
+            xaxis: { title: en ? 'Mission Timeline (UTC) — Click any hour to jump in 3D' : 'Görev Zaman Çizelgesi (UTC) — 3D Simülasyona atlamak için tıklayın', gridcolor: '#1e293b', fixedrange: true, anchor: 'y2' },
+            yaxis: {
+                domain: [0.58, 1.0], gridcolor: '#1e293b', fixedrange: true,
+                categoryorder: 'array', categoryarray: [lblModeRow, lblEarthRow, lblSunRow]
+            },
+            yaxis2: {
+                domain: [0.0, 0.46], title: { text: en ? 'Angle (°)' : 'Açı (°)', font: { size: 11, color: '#94a3b8' } },
+                gridcolor: '#1e293b', zerolinecolor: '#334155', fixedrange: true
+            },
+            margin: { t: 12, r: 20, b: 44, l: 128 }
+        }, { displayModeBar: false });
+
+        const tlEl = document.getElementById('timelineChart');
+        tlEl.removeAllListeners && tlEl.removeAllListeners('plotly_click');
+        tlEl.on('plotly_click', function(ev) {
+            const pt = ev && ev.points && ev.points[0];
+            if (!pt) return;
+            const idx = typeof pt.pointIndex === 'number' ? pt.pointIndex : times.indexOf(pt.x);
+            if (idx >= 0 && idx < CURRENT_DATA_A.timeline.length) {
+                stopAnimation();
+                document.getElementById('timeSlider').value = idx;
+                SpaceSim.setFrame(CURRENT_DATA_A.timeline[idx]);
+                if (typeof switchPage === 'function') switchPage('overview');
+            }
+        });
+
+        const mb = b.metrics;
+        const badgeScoreEl = document.getElementById('tabBadgeScore');
+        if (badgeScoreEl) {
+            badgeScoreEl.textContent = `${m.feasibility_score}/100`;
+            badgeScoreEl.style.color = m.feasibility_score >= 75 ? '#4ade80' : (m.feasibility_score >= 55 ? '#facc15' : '#f87171');
+        }
+        const badgeWinEl = document.getElementById('tabBadgeWinner');
+        if (badgeWinEl) {
+            const diff = m.feasibility_score - mb.feasibility_score;
+            badgeWinEl.textContent = diff > 0.5 ? (en ? '🔵 A Leads' : '🔵 A Önde') : (diff < -0.5 ? (en ? '🟠 B Leads' : '🟠 B Önde') : (en ? '≈ Tie' : '≈ Dengeli'));
+            badgeWinEl.style.color = diff > 0.5 ? '#38bdf8' : (diff < -0.5 ? '#fb923c' : '#cbd5e1');
+        }
+        const winBadge = (aBetter, bBetter, txtA, txtB, txtTie, warnTxt) => {
+            if (warnTxt) return `<span class="adv-badge adv-warn">${warnTxt}</span>`;
+            if (aBetter) return `<span class="adv-badge adv-a">✓ ${en ? 'A Leads' : 'A Önde'}: ${txtA}</span>`;
+            if (bBetter) return `<span class="adv-badge adv-b">✓ ${en ? 'B Leads' : 'B Önde'}: ${txtB}</span>`;
+            return `<span class="adv-badge adv-tie">≈ ${txtTie}</span>`;
+        };
+        const dScore = m.feasibility_score - mb.feasibility_score;
+        const dSun = m.sun_hours - mb.sun_hours;
+        const dDark = m.max_dark_streak_hours - mb.max_dark_streak_hours;
+        const dEarth = m.earth_hours - mb.earth_hours;
+        const dSlope = a.site.slope_deg - b.site.slope_deg;
+        const shortA = a.site.name.split(': ').pop().split(' (')[0];
+        const shortB = b.site.name.split(': ').pop().split(' (')[0];
+
+        let earthWarn = '';
+        if (!m.earth_at_landing && mb.earth_at_landing) earthWarn = en ? `⚠️ A blocked at landing! B open ${mb.hours_to_earthset}h` : `⚠️ A inişte kesik! B ${mb.hours_to_earthset} sa açık`;
+        else if (m.earth_at_landing && m.hours_to_earthset <= 12 && mb.hours_to_earthset > 24) earthWarn = en ? `⚠️ A drops in ${m.hours_to_earthset}h! B ${mb.hours_to_earthset}h` : `⚠️ A ${m.hours_to_earthset} sa sonra kesilir! B ${mb.hours_to_earthset} sa`;
+
+        document.getElementById('compareTable').innerHTML = `
+            <thead>
+                <tr>
+                    <th>${en ? 'Comparison Criterion' : 'Karşılaştırma Kriteri'}</th>
+                    <th>${en ? 'Option A' : 'Seçenek A'}: ${a.site.name} (${a.start_date})</th>
+                    <th>${en ? 'Option B' : 'Seçenek B'}: ${b.site.name} (${b.start_date})</th>
+                    <th>${en ? 'Comparison & Advantage Analysis' : 'Karşılaştırma & Avantaj Analizi'}</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>${en ? 'Overall Decision & Score' : 'Genel Karar & Puan'}</td>
+                    <td class="${dScore > 0.5 ? 'cell-win' : ''}"><strong>${m.feasibility_score} ${en ? 'Pts' : 'Puan'}</strong> &nbsp;${getBadge(m.status)}</td>
+                    <td class="${dScore < -0.5 ? 'cell-win' : ''}"><strong>${mb.feasibility_score} ${en ? 'Pts' : 'Puan'}</strong> &nbsp;${getBadge(mb.status)}</td>
+                    <td>${winBadge(dScore >= 0.5, dScore <= -0.5, `+${dScore.toFixed(1)} ${en ? 'pts' : 'puan'}`, `+${(-dScore).toFixed(1)} ${en ? 'pts' : 'puan'}`, en ? 'Scores tied' : 'Puanlar başa baş')}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Solar Illumination & Avg Angle' : 'Güneş Aydınlanma & Ort. Açı'}</td>
+                    <td class="${dSun > 3 ? 'cell-win' : ''}"><strong>%${m.sun_visibility_pct}</strong> (${m.sun_hours} ${en ? 'hrs | Avg' : 'saat | Ort'}: ${m.avg_sun_elevation_deg}°)</td>
+                    <td class="${dSun < -3 ? 'cell-win' : ''}"><strong>%${mb.sun_visibility_pct}</strong> (${mb.sun_hours} ${en ? 'hrs | Avg' : 'saat | Ort'}: ${mb.avg_sun_elevation_deg}°)</td>
+                    <td>${winBadge(dSun >= 3, dSun <= -3, `+${dSun} ${en ? 'hrs sunlight' : 'saat fazla güneş'}`, `+${-dSun} ${en ? 'hrs sunlight' : 'saat fazla güneş'}`, en ? 'Sunlight balanced' : 'Güneş süresi dengeli')}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Hours Until First Sunset' : 'İlk Gün Batımına Kalan Süre'}</td>
+                    <td class="${dDark < -6 ? 'cell-win' : ''}"><strong>${m.hours_to_sunset} ${en ? 'hrs' : 'saat'}</strong> (${en ? 'Max dark' : 'Maks karanlık'}: ${m.max_dark_streak_hours} ${en ? 'h' : 'sa'})</td>
+                    <td class="${dDark > 6 ? 'cell-win' : ''}"><strong>${mb.hours_to_sunset} ${en ? 'hrs' : 'saat'}</strong> (${en ? 'Max dark' : 'Maks karanlık'}: ${mb.max_dark_streak_hours} ${en ? 'h' : 'sa'})</td>
+                    <td>${winBadge(dDark <= -6, dDark >= 6, `${-dDark} ${en ? 'h shorter shadow' : 'sa daha kısa karanlık'}`, `${dDark} ${en ? 'h shorter shadow' : 'sa daha kısa karanlık'}`, en ? 'Similar battery risk' : 'Batarya riski yakın')}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Earth Comm & First Blackout' : 'Dünya İletişimi & İlk Kesinti'}</td>
+                    <td class="${dEarth > 3 && !earthWarn ? 'cell-win' : ''}"><strong>%${m.earth_comm_pct}</strong> (${en ? 'First loss' : 'İlk kesintiye'}: ${m.hours_to_earthset} ${en ? 'h' : 'sa'})</td>
+                    <td class="${dEarth < -3 || earthWarn ? 'cell-win' : ''}"><strong>%${mb.earth_comm_pct}</strong> (${en ? 'First loss' : 'İlk kesintiye'}: ${mb.hours_to_earthset} ${en ? 'h' : 'sa'})</td>
+                    <td>${winBadge(dEarth >= 3 && !earthWarn, dEarth <= -3, `+${dEarth} ${en ? 'h more link' : 'sa fazla bağlantı'}`, `+${-dEarth} ${en ? 'h more link' : 'sa fazla bağlantı'}`, en ? 'Comm balanced' : 'İletişim dengeli', earthWarn)}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Real LOLA Slope & Elevation' : 'Gerçek LOLA Eğim & Rakım'}</td>
+                    <td class="${dSlope < -0.5 ? 'cell-win' : ''}">${en ? 'Slope' : 'Eğim'}: <strong>${a.site.slope_deg}°</strong> | ${en ? 'Elev' : 'Rakım'}: ${a.site.elevation_km} km</td>
+                    <td class="${dSlope > 0.5 ? 'cell-win' : ''}">${en ? 'Slope' : 'Eğim'}: <strong>${b.site.slope_deg}°</strong> | ${en ? 'Elev' : 'Rakım'}: ${b.site.elevation_km} km</td>
+                    <td>${winBadge(dSlope <= -0.5, dSlope >= 0.5, `${(-dSlope).toFixed(2)}° ${en ? 'flatter' : 'daha düz zemin'}`, `${dSlope.toFixed(2)}° ${en ? 'flatter' : 'daha düz zemin'}`, en ? 'Similar slope' : 'Zemin eğimi benzer')}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Water Ice & PSR Access' : 'Su Buzu & Kalıcı Gölge (PSR)'}</td>
+                    <td><strong>${m.water_ice_potential}</strong></td>
+                    <td><strong>${mb.water_ice_potential}</strong></td>
+                    <td>${winBadge(m.psr_neighbor && !mb.psr_neighbor, mb.psr_neighbor && !m.psr_neighbor, `${shortA} ${en ? 'PSR access' : 'PSR komşusu'}`, `${shortB} ${en ? 'PSR access' : 'PSR komşusu'}`, (m.psr_neighbor && mb.psr_neighbor) ? (en ? 'Both have PSR ice access' : 'İkisi de PSR su buzu erişimli') : (en ? 'Low PSR potential' : 'PSR potansiyeli düşük'))}</td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Comm Channel & Signal Delay' : 'İletişim Kanalı & Sinyal Gecikmesi'}</td>
+                    <td>${en ? 'Direct-To-Earth (DTE) | <strong>~1.28 s</strong> (One-Way Light Time)' : 'Doğrudan Dünya (DTE) | <strong>~1.28 sn</strong> (Tek Yön Işık Hızı)'}</td>
+                    <td>${en ? 'Direct-To-Earth (DTE) | <strong>~1.28 s</strong> (One-Way Light Time)' : 'Doğrudan Dünya (DTE) | <strong>~1.28 sn</strong> (Tek Yön Işık Hızı)'}</td>
+                    <td><span class="adv-badge adv-tie">≈ DTE (~1.28s OWLT)</span></td>
+                </tr>
+                <tr>
+                    <td>${en ? 'Lunar Libration' : 'Ay Yalpalaması (Librasyon)'}</td>
+                    <td>${en ? 'Active (Earth nods ±6° to ±8° on horizon)' : 'Aktif (Dünya ufukta ±6° ila ±8° salınır)'}</td>
+                    <td>${en ? 'Active (Earth nods ±6° to ±8° on horizon)' : 'Aktif (Dünya ufukta ±6° ila ±8° salınır)'}</td>
+                    <td><span class="adv-badge adv-tie">${en ? '≈ ±6°–±8° libration active' : '≈ ±6°–±8° salınım aktif'}</span></td>
+                </tr>
+            </tbody>
+        `;
+
+        // Maskot durum halkasını, hızlı durum hapını ve anlık karşılaştırma yorumunu hemen güncelle
+        const avBtn = document.getElementById('mascotAvatarBtn');
+        avBtn.className = 'mascot-avatar-btn ' + (m.status.startsWith('GO') ? 'status-go' : (m.status.startsWith('CAUTION') ? 'status-caution' : 'status-nogo'));
+
+        const pillEl = document.getElementById('mascotQuickPill');
+        if (pillEl) {
+            const pDiff = m.feasibility_score - mb.feasibility_score;
+            const winTxt = Math.abs(pDiff) < 0.5
+                ? (en ? 'A & B Tied' : 'A & B Başa Baş')
+                : (pDiff > 0
+                    ? (en ? `🔵 A +${pDiff.toFixed(1)} pts ahead` : `🔵 A +${pDiff.toFixed(1)} puan önde`)
+                    : (en ? `🟠 B +${(-pDiff).toFixed(1)} pts ahead` : `🟠 B +${(-pDiff).toFixed(1)} puan önde`));
+            pillEl.innerHTML = `<span style="color:#38bdf8;">🤖 LUNA:</span> <span>${winTxt}</span> <span style="color:#94a3b8; font-size:0.72rem;">• ${en ? 'Ask AI' : 'Soru Sor'}</span>`;
+        }
+
+        const instantHtml = buildInstantComparisonHTML(a, b);
+        document.getElementById('tableAiSummary').innerHTML = `
+            <div class="ai-summary-title">
+                <span>${en ? '🤖 LUNA Comparison Analysis (Connecting Gemini AI...)' : '🤖 LUNA Karşılaştırma Analizi (Gemini AI Bağlanıyor...)'}</span>
+                <span style="font-size:0.74rem; color:#94a3b8;">${en ? 'Instant Pre-Analysis' : 'Anlık Ön Analiz'}</span>
+            </div>
+            ${formatAiSectionsHTML(instantHtml, true)}
+        `;
+        document.getElementById('mascotCommentBody').innerHTML = formatAiSectionsHTML(instantHtml, false);
+        document.getElementById('mascotSourceBadge').textContent = en ? 'Gemini AI loading...' : 'Gemini AI hazırlanıyor...';
+
+        requestGeminiComment(a, b, '', false);
+    }
+
+    function formatAiSectionsHTML(rawHtml, useGrid = true) {
+        if (!rawHtml) return '';
+        const parts = String(rawHtml).split(/<br>\s*<br>/i).map(s => s.trim()).filter(Boolean);
+        if (parts.length <= 1) {
+            return `<div class="ai-sec-card">${rawHtml}</div>`;
+        }
+        const cls = useGrid ? 'ai-sec-grid' : 'ai-sec-stack';
+        return `<div class="${cls}">${parts.map(p => `<div class="ai-sec-card">${p}</div>`).join('')}</div>`;
+    }
+
+    function buildInstantComparisonHTML(a, b) {
+        const m = a.metrics, mb = b.metrics;
+        const nameA = a.site.name.split(': ').pop().split(' (')[0];
+        const nameB = b.site.name.split(': ').pop().split(' (')[0];
+        const diff = m.feasibility_score - mb.feasibility_score;
+        const worstDark = Math.max(m.max_dark_streak_hours, mb.max_dark_streak_hours);
+        if (LANG === 'en') {
+            const sec1 = Math.abs(diff) < 0.5
+                ? `🏆 <strong>1. Overall Decision & Mission Recommendation:</strong> <strong>${nameA}</strong> (${m.feasibility_score} pts — ${m.status}) and <strong>${nameB}</strong> (${mb.feasibility_score} pts — ${mb.status}) are closely matched in overall feasibility.`
+                : (diff > 0
+                    ? `🏆 <strong>1. Overall Decision & Mission Recommendation:</strong> Option A (<strong>${nameA}</strong>) leads with <strong>${m.feasibility_score} pts</strong> (${m.status}), outperforming Option B (<strong>${nameB}</strong>, ${mb.feasibility_score} pts) by <strong>+${diff.toFixed(1)} pts</strong> as the primary landing target.`
+                    : `🏆 <strong>1. Overall Decision & Mission Recommendation:</strong> Option B (<strong>${nameB}</strong>) leads with <strong>${mb.feasibility_score} pts</strong> (${mb.status}), outperforming Option A (<strong>${nameA}</strong>, ${m.feasibility_score} pts) by <strong>+${(-diff).toFixed(1)} pts</strong> as the safer primary target.`);
+            const darkNote = worstDark > 48
+                ? `A maximum continuous shadow of <strong>${worstDark} hours</strong> requires high-capacity batteries and RHU/RTG heaters against -233°C thermal shock.`
+                : `Continuous darkness duration remains within safe battery limits at both candidates.`;
+            const sec2 = `☀️ <strong>2. Solar Power & Thermal Survival:</strong> Option A receives <strong>${m.sun_visibility_pct}%</strong> sunlight (${m.sun_hours} hrs | Avg angle: ${m.avg_sun_elevation_deg}° | First sunset: ${m.hours_to_sunset}h | Max dark: ${m.max_dark_streak_hours}h), while Option B receives <strong>${mb.sun_visibility_pct}%</strong> (${mb.sun_hours} hrs | Avg angle: ${mb.avg_sun_elevation_deg}° | First sunset: ${mb.hours_to_sunset}h | Max dark: ${mb.max_dark_streak_hours}h). ${darkNote}`;
+            const relayNote = Math.min(m.earth_comm_pct, mb.earth_comm_pct) < 75
+                ? `Because crater rims block Earth visibility, an orbital <strong>Relay Satellite (LunaNet / Queqiao-2)</strong> is mandatory.`
+                : `Both sites maintain strong Direct-To-Earth (DTE / NASA DSN) communication windows.`;
+            const sec3 = `📡 <strong>3. Direct-To-Earth (DTE) Comm & Libration:</strong> Earth link is <strong>${m.earth_comm_pct}%</strong> at Option A (first loss in ${m.hours_to_earthset}h) and <strong>${mb.earth_comm_pct}%</strong> at Option B (first loss in ${mb.hours_to_earthset}h), with ~1.28s OWLT delay and ±6°–±8° libration active. ${relayNote}`;
+            const saferSlope = a.site.slope_deg <= b.site.slope_deg ? `Option A (${a.site.slope_deg}°)` : `Option B (${b.site.slope_deg}°)`;
+            const sec4 = `🏔️ <strong>4. LOLA Topography & ❄️ Water Ice (PSR):</strong> Option A slope is <strong>${a.site.slope_deg}°</strong> (elev: ${a.site.elevation_km} km), Option B slope is <strong>${b.site.slope_deg}°</strong> (elev: ${b.site.elevation_km} km). <strong>${saferSlope}</strong> offers flatter terrain for landing stability.`;
+            const sec5 = `⚠️ <strong>5. Engineering Recommendation:</strong> Prioritize <strong>${diff >= 0 ? nameA : nameB}</strong> and execute PSR water-ice sampling during the initial sunlit charging window.`;
+            return `${sec1}<br><br>${sec2}<br><br>${sec3}<br><br>${sec4}<br><br>${sec5}`;
+        }
+        const sec1 = Math.abs(diff) < 0.5
+            ? `🏆 <strong>1. Genel Karar & Görev Önerisi:</strong> <strong>${nameA}</strong> (${m.feasibility_score} puan — ${m.status}) ve <strong>${nameB}</strong> (${mb.feasibility_score} puan — ${mb.status}) toplam görev uygulanabilirliğinde başa baş düzeydedir.`
+            : (diff > 0
+                ? `🏆 <strong>1. Genel Karar & Görev Önerisi:</strong> Seçenek A (<strong>${nameA}</strong>), <strong>${m.feasibility_score} puan</strong> (${m.status}) ile Seçenek B'ye (<strong>${nameB}</strong>, ${mb.feasibility_score} puan) göre <strong>+${diff.toFixed(1)} puan</strong> daha avantajlıdır ve birincil iniş bölgesi olarak önerilir.`
+                : `🏆 <strong>1. Genel Karar & Görev Önerisi:</strong> Seçenek B (<strong>${nameB}</strong>), <strong>${mb.feasibility_score} puan</strong> (${mb.status}) ile Seçenek A'ya (<strong>${nameA}</strong>, ${m.feasibility_score} puan) göre <strong>+${(-diff).toFixed(1)} puan</strong> daha güvenlidir ve birincil iniş hedefi seçilmelidir.`);
+        const darkNote = worstDark > 48
+            ? `En uzun kesintisiz karanlık süresinin <strong>${worstDark} saate</strong> ulaşması nedeniyle -233°C termal şoka karşı yüksek kapasiteli batarya ve radyoizotop ısıtıcı (RHU/RTG) zorunludur.`
+            : `Kesintisiz karanlık süreleri her iki seçenekte de standart batarya limitleri içindedir.`;
+        const sec2 = `☀️ <strong>2. Güneş Enerjisi & Termal Sağkalım:</strong> Seçenek A <strong>%${m.sun_visibility_pct}</strong> (${m.sun_hours} sa | Ort. açı: ${m.avg_sun_elevation_deg}° | İlk batış: ${m.hours_to_sunset} sa | Maks. karanlık: ${m.max_dark_streak_hours} sa), Seçenek B ise <strong>%${mb.sun_visibility_pct}</strong> (${mb.sun_hours} sa | Ort. açı: ${mb.avg_sun_elevation_deg}° | İlk batış: ${mb.hours_to_sunset} sa | Maks. karanlık: ${mb.max_dark_streak_hours} sa) güneş enerjisi üretir. ${darkNote}`;
+        const relayNote = Math.min(m.earth_comm_pct, mb.earth_comm_pct) < 75
+            ? `Krater sırtı Dünya'yı perdelediği için kesintisiz veri akışı adına yörüngede <strong>Röle Uydusu (LunaNet / Queqiao-2)</strong> desteği şarttır.`
+            : `Her iki bölgede de Doğrudan Dünya İletişimi (DTE / NASA DSN) pencereleri güçlüdür.`;
+        const sec3 = `📡 <strong>3. Dünya İletişimi (DTE) & Librasyon:</strong> Doğrudan Dünya bağlantısı A'da <strong>%${m.earth_comm_pct}</strong> (ilk kesintiye ${m.hours_to_earthset} sa), B'de <strong>%${mb.earth_comm_pct}</strong> (ilk kesintiye ${mb.hours_to_earthset} sa) oranındadır (~1.28 sn OWLT sinyal gecikmesi ve ±6°–±8° librasyon salınımı aktif). ${relayNote}`;
+        const saferSlope = a.site.slope_deg <= b.site.slope_deg ? `Seçenek A (${a.site.slope_deg}°)` : `Seçenek B (${b.site.slope_deg}°)`;
+        const sec4 = `🏔️ <strong>4. LOLA Topografya & ❄️ Su Buzu (PSR):</strong> Seçenek A eğimi <strong>${a.site.slope_deg}°</strong> (rakım: ${a.site.elevation_km} km | PSR: ${m.water_ice_potential}), Seçenek B eğimi <strong>${b.site.slope_deg}°</strong> (rakım: ${b.site.elevation_km} km | PSR: ${mb.water_ice_potential}). İniş devrilme güvenliği açısından <strong>${saferSlope}</strong> daha düz zemin sunar.`;
+        const sec5 = `⚠️ <strong>5. Mühendislik Tavsiyesi:</strong> Görev planlamasında <strong>${diff >= 0 ? nameA : nameB}</strong> rotası önceliklendirilmeli; iniş sonrası ilk aydınlık pencerede bataryalar tam şarj edilerek kalıcı gölge (PSR) su buzu örneklemesi gerçekleştirilmelidir.`;
+        return `${sec1}<br><br>${sec2}<br><br>${sec3}<br><br>${sec4}<br><br>${sec5}`;
+    }
+
+    async function requestGeminiComment(a, b, question = '', force = false) {
+        if (!a || !b) return;
+        if (ACTIVE_AI_CTRL) ACTIVE_AI_CTRL.abort();
+        const ctrl = new AbortController();
+        ACTIVE_AI_CTRL = ctrl;
+        const en = (LANG === 'en');
+
+        const compact = (d) => ({
+            start_date: d.start_date,
+            duration_days: d.duration_days,
+            site: {
+                id: d.site.id, name: d.site.name, lat: d.site.lat, lon: d.site.lon,
+                slope_deg: d.site.slope_deg, elevation_km: d.site.elevation_km
+            },
+            metrics: d.metrics
+        });
+
+        if (question) {
+            document.getElementById('mascotSourceBadge').textContent = en ? 'Gemini AI thinking...' : 'Gemini AI düşünüyor...';
+            document.getElementById('mascotCommentBody').innerHTML = `<span style="color:#94a3b8;">${en ? '🤖 Analyzing your question...' : '🤖 Sorunuz analiz ediliyor...'}</span>`;
+        }
+
+        try {
+            const res = await fetch('/api/ai-comment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: ctrl.signal,
+                body: JSON.stringify({
+                    site_a: compact(a),
+                    site_b: compact(b),
+                    view_mode: VIEW_MODE,
+                    lang: LANG,
+                    question,
+                    force
+                })
+            });
+            if (!res.ok) return;
+            const out = await res.json();
+            document.getElementById('mascotSourceBadge').textContent = out.source || 'Gemini AI';
+            document.getElementById('mascotCommentBody').innerHTML = formatAiSectionsHTML(out.comment, false);
+            if (!question) {
+                document.getElementById('tableAiSummary').innerHTML = `
+                    <div class="ai-summary-title">
+                        <span>${en ? '🤖 LUNA Comparison Analysis' : '🤖 LUNA Karşılaştırma Analizi'}</span>
+                        <span style="font-size:0.74rem; color:#94a3b8;">${out.source || 'Gemini AI'}</span>
+                    </div>
+                    ${formatAiSectionsHTML(out.comment, true)}
+                `;
+            }
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            document.getElementById('mascotSourceBadge').textContent = en ? 'Instant Engine' : 'Anlık Motor';
+        } finally {
+            if (ACTIVE_AI_CTRL === ctrl) ACTIVE_AI_CTRL = null;
+        }
+    }
+
+    function toggleMascotBubble() {
+        const b = document.getElementById('mascotBubble');
+        const isHidden = window.getComputedStyle(b).display === 'none';
+        b.style.display = isHidden ? 'block' : 'none';
+    }
+
+    function applyMascotImage(dataUrl) {
+        const img = document.getElementById('mascotCustomImg');
+        const svg = document.getElementById('mascotDefaultSvg');
+        if (dataUrl) {
+            img.src = dataUrl;
+            img.style.display = 'block';
+            svg.style.display = 'none';
+        } else {
+            img.style.display = 'none';
+            svg.style.display = 'block';
+        }
+    }
+
+    function loadSavedMascot() {
+        try {
+            const saved = localStorage.getItem('lunar_custom_mascot');
+            if (saved) applyMascotImage(saved);
+        } catch (_) {}
+    }
+
+    function onMascotFileChange(ev) {
+        const file = ev && ev.target && ev.target.files && ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const url = e.target.result;
+            applyMascotImage(url);
+            try { localStorage.setItem('lunar_custom_mascot', url); } catch (_) {}
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function refreshMascotAI() {
+        if (CURRENT_DATA_A && CURRENT_DATA_B) {
+            document.getElementById('mascotSourceBadge').textContent = 'Yenileniyor...';
+            requestGeminiComment(CURRENT_DATA_A, CURRENT_DATA_B, '', true);
+        }
+    }
+
+    function askMascotQuestion() {
+        const inp = document.getElementById('mascotAskInput');
+        const q = (inp.value || '').trim();
+        if (!q || !CURRENT_DATA_A || !CURRENT_DATA_B) return;
+        inp.value = '';
+        requestGeminiComment(CURRENT_DATA_A, CURRENT_DATA_B, q, true);
+    }
+
+    function exportCSV() {
+        if (!CURRENT_DATA_A) return;
+        const rows = [["datetime_utc", "sun_az", "sun_el", "sun_horizon_limit", "sun_visible", "solar_power_pct", "earth_az", "earth_el", "earth_visible"]];
+        CURRENT_DATA_A.timeline.forEach(t => {
+            rows.push([t.datetime_utc, t.sun_az, t.sun_el, t.sun_horizon_limit, t.sun_visible, t.solar_power_pct, t.earth_az, t.earth_el, t.earth_visible]);
+        });
+        const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", `lunar_mission_${CURRENT_DATA_A.site.id}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    init();
+</script>
+</body>
+</html>

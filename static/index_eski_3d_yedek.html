@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunar Landing Site Navigator 3D | NASA Space Apps 2026</title>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg: #090d16;
+            --card: #111827;
+            --border: #1f2937;
+            --accent: #38bdf8;
+            --sun: #facc15;
+            --earth: #4ade80;
+            --danger: #f87171;
+            --orange: #fb923c;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+        body { background: var(--bg); color: var(--text); padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+        header {
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+            border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px;
+        }
+        header h1 { font-size: 1.4rem; color: var(--accent); letter-spacing: 0.5px; }
+        header p { font-size: 0.84rem; color: var(--muted); margin-top: 4px; }
+        .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .data-pill {
+            background: rgba(74, 222, 128, 0.12); border: 1px solid rgba(74, 222, 128, 0.35);
+            color: #4ade80; padding: 6px 12px; border-radius: 20px; font-size: 0.76rem; font-weight: 600;
+        }
+        .mode-switch {
+            display: flex; background: #0b1120; border: 1px solid #334155; border-radius: 20px; padding: 3px;
+        }
+        .mode-btn {
+            background: transparent; border: none; color: var(--muted); padding: 5px 12px;
+            border-radius: 16px; font-size: 0.78rem; font-weight: 600; cursor: pointer; height: auto; width: auto;
+        }
+        .mode-btn.active { background: var(--accent); color: #090d16; }
+
+        .controls {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+            gap: 12px; background: var(--card); padding: 16px; border-radius: 12px;
+            border: 1px solid var(--border); margin-bottom: 16px;
+        }
+        .custom-coord-bar {
+            display: none; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px; background: rgba(56, 189, 248, 0.08); padding: 14px 16px;
+            border-radius: 10px; border: 1px dashed var(--accent); margin-bottom: 16px; align-items: end;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 0.72rem; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+        select, input, button {
+            background: #0b1120; color: var(--text); border: 1px solid #334155;
+            padding: 9px 11px; border-radius: 8px; font-size: 0.88rem; width: 100%;
+        }
+        button.primary-btn {
+            background: linear-gradient(135deg, #0284c7, #2563eb); border: none;
+            font-weight: 600; cursor: pointer; margin-top: auto; height: 39px;
+        }
+        button.primary-btn:hover { filter: brightness(1.1); }
+
+        .edu-box {
+            display: none; background: rgba(250, 204, 21, 0.08); border: 1px solid rgba(250, 204, 21, 0.3);
+            border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; font-size: 0.88rem; line-height: 1.5;
+        }
+        .edu-box strong { color: var(--sun); }
+
+        .summary-banner {
+            background: linear-gradient(90deg, rgba(56, 189, 248, 0.12), rgba(17, 24, 39, 0.9));
+            border-left: 4px solid var(--accent); border-radius: 10px;
+            padding: 16px 20px; margin-bottom: 18px; line-height: 1.55;
+        }
+        .summary-banner h2 { font-size: 1rem; color: var(--accent); margin-bottom: 6px; }
+        .summary-banner p { font-size: 0.93rem; color: #e2e8f0; }
+
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px; margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px;
+        }
+        .kpi-title { font-size: 0.74rem; color: var(--muted); font-weight: 600; }
+        .kpi-value { font-size: 1.65rem; font-weight: 700; margin: 5px 0; }
+        .kpi-sub { font-size: 0.80rem; color: var(--muted); }
+
+        .split-grid {
+            display: grid; grid-template-columns: 1.1fr 1.3fr; gap: 20px; margin-bottom: 20px;
+        }
+        @media (max-width: 1024px) { .split-grid { grid-template-columns: 1fr; } }
+
+        .chart-box {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 18px; margin-bottom: 20px;
+        }
+        .split-grid .chart-box { margin-bottom: 0; }
+        .chart-header { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .chart-header h3 { font-size: 1.02rem; color: #f8fafc; }
+        .chart-header p { font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+
+        /* Three.js Sahne Konteyneri */
+        .space-viewport {
+            position: relative;
+            width: 100%;
+            height: 365px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #0b132b 0%, #03050a 100%);
+            border: 1px solid #1e293b;
+        }
+        .hud-overlay {
+            position: absolute;
+            top: 10px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            z-index: 5;
+        }
+        .hud-badge {
+            background: rgba(9, 13, 22, 0.78);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            padding: 6px 11px;
+            border-radius: 8px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .hud-legend {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            background: rgba(9, 13, 22, 0.75);
+            backdrop-filter: blur(4px);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            color: #cbd5e1;
+            pointer-events: none;
+            display: flex;
+            gap: 12px;
+        }
+
+        .anim-bar {
+            display: flex; align-items: center; gap: 12px; background: #0b1120;
+            padding: 10px 14px; border-radius: 8px; border: 1px solid #1e293b; margin-top: 10px;
+        }
+        .anim-btn {
+            background: var(--accent); color: #090d16; border: none; border-radius: 6px;
+            padding: 6px 14px; font-weight: 700; cursor: pointer; width: auto; height: auto; font-size: 0.82rem;
+        }
+        .anim-slider { flex: 1; accent-color: var(--accent); cursor: pointer; padding: 0; border: none; }
+        .anim-label { font-size: 0.8rem; color: var(--sun); font-weight: 600; min-width: 145px; text-align: right; }
+
+        .compare-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .compare-table th, .compare-table td {
+            padding: 11px 14px; border-bottom: 1px solid var(--border); text-align: left;
+        }
+        .compare-table th { color: var(--accent); background: #0b1120; }
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.76rem; font-weight: 600; }
+        .badge-go { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
+        .badge-caution { background: rgba(250, 204, 21, 0.15); color: #facc15; }
+        .badge-nogo { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+        #loader { display: none; color: var(--sun); font-size: 0.85rem; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1>AY İNİŞ YERİ NAVİGATÖRÜ 3D (LUNAR LANDING SITE NAVIGATOR)</h1>
+        <p>Artemis, CLPS ve Özel Koordinatlar İçin Gerçek NASA LRO LOLA DEM (80m/px) + JPL Horizons Planlayıcısı</p>
+    </div>
+    <div class="header-right">
+        <div class="mode-switch">
+            <button class="mode-btn active" id="btnEng" onclick="setViewMode('eng')">Mühendislik Modu</button>
+            <button class="mode-btn" id="btnEdu" onclick="setViewMode('edu')">Eğitim & Halk Modu</button>
+        </div>
+        <span class="data-pill" id="sourceBadge">NASA LOLA + JPL Horizons Aktif</span>
+        <div id="loader">Hesaplanıyor...</div>
+    </div>
+</header>
+
+<div class="edu-box" id="eduBox">
+    <div style="font-size:0.95rem; font-weight:700; color:var(--sun); margin-bottom:8px;">🎓 Eğitim & Halk Rehberi: Ay Güney Kutbu Neden Tarihin En Zorlu Görev Hedefidir?</div>
+    <ul style="margin-left:20px; line-height:1.6; display:flex; flex-direction:column; gap:6px;">
+        <li><strong>1.54° Eksen Eğikliği & Ufuk Boyu Güneş:</strong> Dünya'nın ekseni 23.5° eğikken Ay'ın ekseni yalnızca 1.54° eğiktir. Bu nedenle Güney Kutbu'nda Güneş göğe yükselmez, ufuk çizgisini sıyırarak 360° döner. Dağ tepeleri neredeyse sürekli ışık alırken, krater tabanları milyarlarca yıldır zifiri karanlıktadır.</li>
+        <li><strong>Kalıcı Gölge Bölgeleri (PSR) & Su Buzu:</strong> Kraterlerin dibi -240°C'ye varan dondurucu soğukluktadır. Güneş ışığı görmeyen bu "Kalıcı Gölge Bölgeleri"nde (Permanently Shadowed Regions - PSR) geleceğin Ay üssü, içme suyu ve roket yakıtı (sıvı hidrojen/oksijen) için hayati olan milyarlarca tonluk <strong>su buzu</strong> saklıdır.</li>
+        <li><strong>Apollo (Ekvator) ile Artemis (Güney Kutbu) Tezadı:</strong> Geçmişteki tarihi Apollo görevleri Ay ekvatoruna inmişti. Ekvatorda Güneş gökyüzünün tam tepesine (~80°-90°) çıkar ve 14 Dünya günü boyunca kesintisiz aydınlatır; Dünya ise gökyüzünde sabittir. Güney Kutbu'nda ise küçük bir krater sırtı Güneş'i veya Dünya'yı anında örter; uzay aracı saniyeler içinde dondurucu karanlığa gömülür.</li>
+        <li><strong>Ay'ın Yalpalaması (Librasyon) & İletişim Gecikmesi:</strong> Ay Dünya'ya hep aynı yüzünü dönse de, yörüngesindeki salınım (optik ve fiziksel librasyon) nedeniyle Dünya Güney Kutbu ufkunda ±6° ile ±8° arasında adeta dans eder. ~384.400 km'lik mesafe nedeniyle Dünya'ya gönderilen bir radyo telemetri sinyali tek yönde <strong>~1.28 saniyede</strong> (OWLT - One Way Light Time) ulaşır.</li>
+    </ul>
+</div>
+
+<div class="controls">
+    <div class="control-group">
+        <label>1. İniş Bölgesi (Seçenek A)</label>
+        <select id="siteA" onchange="toggleCustomBar()"></select>
+    </div>
+    <div class="control-group">
+        <label>2. İniş Tarihi & Saati (UTC)</label>
+        <div style="display:flex; gap:6px;">
+            <input type="date" id="dateA" value="2026-11-15">
+            <input type="time" id="timeA" value="06:00" style="width:110px;">
+        </div>
+    </div>
+    <div class="control-group">
+        <label>3. Görev Süresi</label>
+        <select id="duration">
+            <option value="7">7 Dünya Günü</option>
+            <option value="14" selected>14 Dünya Günü (1 Ay Gündüzü)</option>
+            <option value="28">28 Dünya Günü (Tam Döngü)</option>
+        </select>
+    </div>
+    <div class="control-group">
+        <label>Alternatif Bölge (Seçenek B)</label>
+        <select id="siteB"></select>
+    </div>
+    <div class="control-group">
+        <label>Alternatif Tarih & Saat</label>
+        <div style="display:flex; gap:6px;">
+            <input type="date" id="dateB" value="2026-11-22">
+            <input type="time" id="timeB" value="06:00" style="width:110px;">
+        </div>
+    </div>
+    <button class="primary-btn" onclick="runSimulation()">Simülasyonu Güncelle</button>
+</div>
+
+<div class="custom-coord-bar" id="customCoordBar">
+    <div class="control-group">
+        <label>Özel Enlem (-80.1° ile -89.9° Güney)</label>
+        <input type="number" id="customLat" step="0.05" min="-89.95" max="-80.10" value="-88.50">
+    </div>
+    <div class="control-group">
+        <label>Özel Boylam (0° ile 360° Doğu)</label>
+        <input type="number" id="customLon" step="0.1" min="0" max="360" value="145.00">
+    </div>
+    <div style="font-size:0.82rem; color:#bae6fd; padding-bottom:6px;">
+        İpucu: Sol 3D harita yüzeyinde herhangi bir noktaya tıklayarak da özel koordinat seçebilirsiniz.
+    </div>
+</div>
+
+<div class="summary-banner" id="summaryBanner"></div>
+
+<div class="kpi-grid" id="kpiGrid"></div>
+
+<div class="split-grid">
+    <div class="chart-box">
+        <div class="chart-header">
+            <div>
+                <h3>Gerçek 3D Ay Güney Kutbu Topografya & Krater Haritası</h3>
+                <p>Hazır görev noktalarına veya <strong>yüzeydeki herhangi bir özel noktaya</strong> tıklayarak LOLA analizi yapın.</p>
+            </div>
+        </div>
+        <div id="lunar3dMap" style="height: 415px;"></div>
+    </div>
+
+    <div class="chart-box">
+        <div class="chart-header">
+            <div>
+                <h3>3D Uzay & Krater Ufuk Simülasyonu (WebGL)</h3>
+                <p>Fareyle <strong>360° çevirin</strong>, tekerlekle yakınlaşın: Gerçek LOLA krater dağları, Güneş ışığı ve Dünya lazer hattını izleyin.</p>
+            </div>
+        </div>
+        <div class="space-viewport" id="spaceViewport">
+            <div class="hud-overlay">
+                <div class="hud-badge" id="hudSunStatus">☀️ Güneş Durumu</div>
+                <div class="hud-badge" id="hudEarthStatus">🌍 Dünya Bağlantısı</div>
+            </div>
+            <div class="hud-legend">
+                <span><b style="color:#facc15;">●</b> Güneş Yörüngesi</span>
+                <span><b style="color:#4ade80;">●</b> Dünya Yörüngesi</span>
+                <span><b style="color:#38bdf8;">---</b> Telemetri Işını</span>
+            </div>
+        </div>
+        <div class="anim-bar">
+            <button class="anim-btn" id="playBtn" onclick="togglePlay()">▶ Oynat</button>
+            <input type="range" class="anim-slider" id="timeSlider" min="0" max="335" value="0" oninput="onSliderMove(this.value)">
+            <span class="anim-label" id="animTimeLabel">Saat 0</span>
+        </div>
+    </div>
+</div>
+
+<div class="chart-box">
+    <div class="chart-header">
+        <div>
+            <h3>Görev Boyunca Enerji ve İletişim Takvimi</h3>
+            <p>Üst şerit <strong>Güneş Enerjisini (Sarı = Şarj, Gri = Gölge)</strong>, alt şerit <strong>Dünya İletişimini (Yeşil = Açık, Gri = Kesik)</strong> gösterir.</p>
+        </div>
+        <button class="anim-btn" id="csvBtn" onclick="exportCSV()" style="background:#1e293b; color:#38bdf8; border:1px solid #334155;">⬇ CSV Telemetri İndir</button>
+    </div>
+    <div id="timelineChart" style="height: 215px;"></div>
+</div>
+
+<div class="chart-box">
+    <div class="chart-header">
+        <div>
+            <h3>İki Seçenek Arasında Hızlı Karar Karşılaştırması</h3>
+            <p>Bölge, tarih veya saat değişikliğinin görevin uygulanabilirliğine etkisini yan yana kıyaslayın.</p>
+        </div>
+    </div>
+    <table class="compare-table" id="compareTable"></table>
+</div>
+
+<script>
+    let REAL_TERRAIN = null;
+    let CURRENT_DATA_A = null;
+    let ANIM_TIMER = null;
+    let VIEW_MODE = 'eng';
+
+    // =========================================================================
+    // THREE.JS GERÇEKÇİ 3D UZAY & KRATER UFUK SİMÜLASYONU MOTORU
+    // =========================================================================
+    const SpaceSim = {
+        scene: null, camera: null, renderer: null, controls: null,
+        terrainGroup: null, orbitGroup: null,
+        sunMesh: null, sunLight: null, sunGlow: null,
+        earthMesh: null, commBeam: null, landerSpot: null,
+        initialized: false,
+
+        init() {
+            if (this.initialized) return;
+            const container = document.getElementById('spaceViewport');
+            const w = container.clientWidth || 640;
+            const h = container.clientHeight || 365;
+
+            this.scene = new THREE.Scene();
+            this.scene.fog = new THREE.FogExp2(0x04070f, 0.011);
+
+            this.camera = new THREE.PerspectiveCamera(46, w / h, 0.1, 500);
+            this.camera.position.set(16, 11, 18);
+
+            this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            this.renderer.setSize(w, h);
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.shadowMap.enabled = true;
+            this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(this.renderer.domElement);
+
+            this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+            this.controls.enableDamping = true;
+            this.controls.dampingFactor = 0.06;
+            this.controls.maxPolarAngle = Math.PI * 0.48;
+            this.controls.minDistance = 6;
+            this.controls.maxDistance = 42;
+            this.controls.target.set(0, 1.5, 0);
+
+            // Yıldızlı Uzay Arka Planı
+            const starGeo = new THREE.BufferGeometry();
+            const starCount = 1400;
+            const starPos = new Float32Array(starCount * 3);
+            for (let i = 0; i < starCount * 3; i++) {
+                starPos[i] = (Math.random() - 0.5) * 260;
+            }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+            const starMat = new THREE.PointsMaterial({ color: 0xe2e8f0, size: 0.45, transparent: true, opacity: 0.85 });
+            this.scene.add(new THREE.Points(starGeo, starMat));
+
+            // Hafif Uzay Ortam Işığı
+            this.scene.add(new THREE.AmbientLight(0x1e293b, 0.9));
+
+            // Dinamik Güneş Işığı (Gölgeli)
+            this.sunLight = new THREE.DirectionalLight(0xfffbeb, 2.2);
+            this.sunLight.castShadow = true;
+            this.sunLight.shadow.mapSize.width = 1024;
+            this.sunLight.shadow.mapSize.height = 1024;
+            this.scene.add(this.sunLight);
+
+            // Merkezdeki Uzay Aracı (Artemis Lander)
+            this.buildLander();
+
+            // Parlayan 3D Güneş + Korona Halesi
+            const sunGeo = new THREE.SphereGeometry(1.15, 32, 32);
+            const sunMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+
+            const glowCanvas = document.createElement('canvas');
+            glowCanvas.width = 128; glowCanvas.height = 128;
+            const gCtx = glowCanvas.getContext('2d');
+            const grad = gCtx.createRadialGradient(64, 64, 8, 64, 64, 64);
+            grad.addColorStop(0, 'rgba(253, 224, 71, 1)');
+            grad.addColorStop(0.35, 'rgba(250, 204, 21, 0.45)');
+            grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+            gCtx.fillStyle = grad;
+            gCtx.fillRect(0, 0, 128, 128);
+            const glowTex = new THREE.CanvasTexture(glowCanvas);
+            this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending }));
+            this.sunGlow.scale.set(6.5, 6.5, 1);
+            this.sunMesh.add(this.sunGlow);
+            this.scene.add(this.sunMesh);
+
+            // Gerçekçi Mavi Dünya Küresi + Atmosfer Halesi
+            const earthCanvas = document.createElement('canvas');
+            earthCanvas.width = 256; earthCanvas.height = 128;
+            const eCtx = earthCanvas.getContext('2d');
+            eCtx.fillStyle = '#1d4ed8';
+            eCtx.fillRect(0, 0, 256, 128);
+            eCtx.fillStyle = '#16a34a';
+            eCtx.beginPath(); eCtx.arc(75, 55, 22, 0, Math.PI * 2); eCtx.fill();
+            eCtx.beginPath(); eCtx.arc(165, 68, 28, 0, Math.PI * 2); eCtx.fill();
+            eCtx.fillStyle = 'rgba(255,255,255,0.45)';
+            eCtx.fillRect(10, 32, 230, 7);
+            eCtx.fillRect(30, 82, 190, 6);
+            const earthTex = new THREE.CanvasTexture(earthCanvas);
+
+            const earthGeo = new THREE.SphereGeometry(0.95, 32, 32);
+            const earthMat = new THREE.MeshStandardMaterial({ map: earthTex, roughness: 0.4, metalness: 0.1, emissive: 0x0c4a6e, emissiveIntensity: 0.4 });
+            this.earthMesh = new THREE.Mesh(earthGeo, earthMat);
+            this.scene.add(this.earthMesh);
+
+            // Dünya İletişim Lazer Işını (Uzay aracından Dünya'ya)
+            const beamGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 1.2, 0), new THREE.Vector3(0, 5, 10)]);
+            const beamMat = new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.75 });
+            this.commBeam = new THREE.Line(beamGeo, beamMat);
+            this.scene.add(this.commBeam);
+
+            this.terrainGroup = new THREE.Group();
+            this.orbitGroup = new THREE.Group();
+            this.scene.add(this.terrainGroup);
+            this.scene.add(this.orbitGroup);
+
+            window.addEventListener('resize', () => {
+                if (!container) return;
+                const nw = container.clientWidth;
+                const nh = container.clientHeight;
+                this.camera.aspect = nw / nh;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(nw, nh);
+            });
+
+            this.initialized = true;
+            this.animate();
+        },
+
+        buildLander() {
+            const lander = new THREE.Group();
+            // Altın termal folyo gövde
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.85, roughness: 0.25 });
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.8, 0.9, 8), bodyMat);
+            body.position.y = 0.75;
+            body.castShadow = true;
+            lander.add(body);
+
+            // Üst mürettebat / sensör kabini
+            const topMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, metalness: 0.4, roughness: 0.4 });
+            const cabin = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), topMat);
+            cabin.position.y = 1.35;
+            cabin.castShadow = true;
+            lander.add(cabin);
+
+            // Güneş panelleri (2 kanat)
+            const panelMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, metalness: 0.7, roughness: 0.2, emissive: 0x172554, emissiveIntensity: 0.5 });
+            const panelL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.55), panelMat);
+            panelL.position.set(-1.35, 1.2, 0);
+            const panelR = panelL.clone();
+            panelR.position.set(1.35, 1.2, 0);
+            lander.add(panelL, panelR);
+
+            // 4 İniş Bacağı
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8 });
+            for (let i = 0; i < 4; i++) {
+                const ang = (i * Math.PI) / 2 + Math.PI / 4;
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.1), legMat);
+                leg.position.set(Math.cos(ang) * 0.85, 0.45, Math.sin(ang) * 0.85);
+                leg.rotation.z = -Math.cos(ang) * 0.45;
+                leg.rotation.x = Math.sin(ang) * 0.45;
+                lander.add(leg);
+            }
+
+            // İniş pedi halkası
+            const padGeo = new THREE.RingGeometry(1.4, 1.65, 32);
+            const padMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+            const pad = new THREE.Mesh(padGeo, padMat);
+            pad.rotation.x = -Math.PI / 2;
+            pad.position.y = 0.02;
+            lander.add(pad);
+
+            this.scene.add(lander);
+        },
+
+        updateSiteTerrain(site, timeline) {
+            this.init();
+            while (this.terrainGroup.children.length > 0) {
+                this.terrainGroup.remove(this.terrainGroup.children[0]);
+            }
+            while (this.orbitGroup.children.length > 0) {
+                this.orbitGroup.remove(this.orbitGroup.children[0]);
+            }
+
+            const R_INNER = 6.5;
+            const R_OUTER = 22.0;
+            const R_SKY = 18.5;
+            const elScale = 0.42; // Dereceyi 3D yüksekliğe ölçekler
+
+            // 1. Gerçekçi Kraterli Ay Zemini + 360° LOLA Krater Dağı Silsilesi
+            const radialSegs = 28;
+            const angularSegs = 360;
+            const geo = new THREE.RingGeometry(0.01, R_OUTER, angularSegs, radialSegs);
+            geo.rotateX(-Math.PI / 2);
+
+            const pos = geo.attributes.position;
+            const colors = [];
+            for (let i = 0; i < pos.count; i++) {
+                const x = pos.getX(i);
+                const z = pos.getZ(i);
+                const dist = Math.hypot(x, z);
+
+                // Azimut açısı (0 = Kuzey/-Z, 90 = Doğu/+X)
+                let az = (Math.atan2(x, -z) * 180) / Math.PI;
+                if (az < 0) az += 360;
+                const azIdx = Math.floor(az) % 360;
+                const lolaAngleDeg = site.horizon_360[azIdx] || 0;
+
+                let y = 0;
+                if (dist > R_INNER) {
+                    const t = Math.min(1, (dist - R_INNER) / (R_OUTER - R_INNER));
+                    const smoothRidge = Math.sin(t * Math.PI * 0.85);
+                    const targetH = Math.max(0.2, (lolaAngleDeg + 1.5) * elScale * 1.45);
+                    const microNoise = Math.sin(x * 1.3) * Math.cos(z * 1.3) * 0.18 * t;
+                    y = smoothRidge * targetH + microNoise;
+                } else {
+                    // İç düzlükte hafif ay krateri dokusu
+                    y = (Math.sin(x * 2.5) * Math.cos(z * 2.5)) * 0.04 * (dist / R_INNER);
+                }
+                pos.setY(i, y);
+
+                // Yüksekliğe göre Ay regolit gri-gümüş renk gradyanı
+                const shade = Math.min(0.85, 0.22 + (y / 7.5) * 0.55);
+                colors.push(shade, shade * 1.02, shade * 1.08);
+            }
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            geo.computeVertexNormals();
+
+            const lunarMat = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                roughness: 0.92,
+                metalness: 0.05,
+                flatShading: false
+            });
+            const lunarMesh = new THREE.Mesh(geo, lunarMat);
+            lunarMesh.receiveShadow = true;
+            this.terrainGroup.add(lunarMesh);
+
+            // 360° Gerçek LOLA Ufuk Sınır Çizgisi (Parlayan İnce Hat)
+            const ridgePts = [];
+            for (let az = 0; az <= 360; az++) {
+                const idx = az % 360;
+                const rad = (az * Math.PI) / 180;
+                const h = Math.max(0.15, (site.horizon_360[idx] + 1.5) * elScale * 1.15);
+                ridgePts.push(new THREE.Vector3(R_SKY * Math.sin(rad), h, -R_SKY * Math.cos(rad)));
+            }
+            const ridgeGeo = new THREE.BufferGeometry().setFromPoints(ridgePts);
+            const ridgeLine = new THREE.Line(ridgeGeo, new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.7 }));
+            this.terrainGroup.add(ridgeLine);
+
+            // Pusula Etiketleri (K, D, G, B)
+            const dirs = [
+                { az: 0, text: 'KUZEY (0°)' },
+                { az: 90, text: 'DOĞU (90°)' },
+                { az: 180, text: 'GÜNEY (180°)' },
+                { az: 270, text: 'BATI (270°)' }
+            ];
+            dirs.forEach(d => {
+                const rad = (d.az * Math.PI) / 180;
+                const c = document.createElement('canvas');
+                c.width = 256; c.height = 64;
+                const ctx = c.getContext('2d');
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = 'bold 26px Segoe UI, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(d.text, 128, 40);
+                const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true }));
+                spr.position.set((R_OUTER + 1.5) * Math.sin(rad), 1.2, -(R_OUTER + 1.5) * Math.cos(rad));
+                spr.scale.set(5.5, 1.4, 1);
+                this.terrainGroup.add(spr);
+            });
+
+            // 2. Gökyüzü Kubbesindeki Güneş ve Dünya Yörünge Yayları
+            const skyVec = (az, el) => {
+                const rad = (az * Math.PI) / 180;
+                const y = Math.max(0.2, (el + 1.5) * elScale * 1.15);
+                return new THREE.Vector3(R_SKY * Math.sin(rad), y, -R_SKY * Math.cos(rad));
+            };
+
+            const sunPts = timeline.map(t => skyVec(t.sun_az, t.sun_el));
+            if (sunPts.length > 1) {
+                const sunOrbitGeo = new THREE.BufferGeometry().setFromPoints(sunPts);
+                const sunOrbit = new THREE.Line(sunOrbitGeo, new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.45 }));
+                this.orbitGroup.add(sunOrbit);
+            }
+
+            const earthPts = timeline.map(t => skyVec(t.earth_az, t.earth_el));
+            if (earthPts.length > 1) {
+                const earthOrbitGeo = new THREE.BufferGeometry().setFromPoints(earthPts);
+                const earthOrbit = new THREE.Line(earthOrbitGeo, new THREE.LineBasicMaterial({ color: 0x4ade80, transparent: true, opacity: 0.45 }));
+                this.orbitGroup.add(earthOrbit);
+            }
+        },
+
+        setFrame(cur) {
+            if (!this.initialized || !cur) return;
+            const R_SKY = 18.5;
+            const elScale = 0.42;
+            const skyVec = (az, el) => {
+                const rad = (az * Math.PI) / 180;
+                const y = Math.max(0.2, (el + 1.5) * elScale * 1.15);
+                return new THREE.Vector3(R_SKY * Math.sin(rad), y, -R_SKY * Math.cos(rad));
+            };
+
+            // Güneş Konumu & Işık Tepkisi
+            const sunPos = skyVec(cur.sun_az, cur.sun_el);
+            this.sunMesh.position.copy(sunPos);
+            this.sunLight.position.copy(sunPos);
+
+            const sunHud = document.getElementById('hudSunStatus');
+            if (cur.sun_visible) {
+                this.sunLight.intensity = 2.4;
+                this.sunMesh.material.color.setHex(0xfef08a);
+                this.sunGlow.visible = true;
+                const sunLabel = cur.sun_el > 20.0 ? 'TEPEDE GÜNEŞ (Ekvator)' : 'UFUKTA GÜNEŞ (Kutup)';
+                sunHud.innerHTML = `☀️ <span style="color:#facc15;">${sunLabel} (${cur.sun_el.toFixed(1)}°) | Şarj: %${cur.solar_power_pct}</span>`;
+            } else {
+                // Krater dağının arkasına geçti -> Uzay aracı gölgede!
+                this.sunLight.intensity = 0.15;
+                this.sunMesh.material.color.setHex(0xef4444);
+                this.sunGlow.visible = false;
+                sunHud.innerHTML = `🌑 <span style="color:#f87171;">KRATER GÖLGESİNDE (Ufuk Engeli: ${cur.sun_horizon_limit.toFixed(1)}°)</span>`;
+            }
+
+            // Dünya Konumu & Telemetri Işını
+            const earthPos = skyVec(cur.earth_az, cur.earth_el);
+            this.earthMesh.position.copy(earthPos);
+            this.earthMesh.rotation.y += 0.05;
+
+            const earthHud = document.getElementById('hudEarthStatus');
+            if (cur.earth_visible) {
+                this.commBeam.visible = true;
+                this.commBeam.geometry.setFromPoints([new THREE.Vector3(0, 1.4, 0), earthPos]);
+                earthHud.innerHTML = `🌍 <span style="color:#4ade80;">DÜNYA BAĞLI (${cur.earth_el.toFixed(1)}°) | Gecikme: 1.28s (OWLT) | DSN DTE</span>`;
+            } else {
+                this.commBeam.visible = false;
+                earthHud.innerHTML = `📡 <span style="color:#f87171;">İLETİŞİM KESİK (Krater/Dağ Engeli - Röle Şart)</span>`;
+            }
+
+            document.getElementById('animTimeLabel').textContent = `${cur.datetime_utc} UTC`;
+        },
+
+        animate() {
+            requestAnimationFrame(() => this.animate());
+            if (this.controls) this.controls.update();
+            if (this.renderer && this.scene && this.camera) {
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+    };
+
+    // =========================================================================
+    // ARAYÜZ & VERİ YÖNETİMİ
+    // =========================================================================
+    function setViewMode(mode) {
+        VIEW_MODE = mode;
+        document.getElementById('btnEng').classList.toggle('active', mode === 'eng');
+        document.getElementById('btnEdu').classList.toggle('active', mode === 'edu');
+        document.getElementById('eduBox').style.display = mode === 'edu' ? 'block' : 'none';
+        document.getElementById('csvBtn').style.display = mode === 'eng' ? 'inline-block' : 'none';
+    }
+
+    function toggleCustomBar() {
+        const isCustom = document.getElementById('siteA').value === 'custom';
+        document.getElementById('customCoordBar').style.display = isCustom ? 'grid' : 'none';
+    }
+
+    async function init() {
+        SpaceSim.init();
+        const res = await fetch('/api/terrain3d');
+        REAL_TERRAIN = await res.json();
+        document.getElementById('sourceBadge').textContent = REAL_TERRAIN.source;
+
+        const selA = document.getElementById('siteA');
+        const selB = document.getElementById('siteB');
+
+        Object.values(REAL_TERRAIN.sites).forEach((s, idx) => {
+            selA.add(new Option(s.name, s.id, idx === 0, idx === 0));
+            selB.add(new Option(s.name, s.id, s.id === 'nobile_rim_1', s.id === 'nobile_rim_1'));
+        });
+        selA.add(new Option("📍 Özel Ay Koordinatı Gir (Lat / Lon)...", "custom"));
+        runSimulation();
+    }
+
+    function getBadge(status) {
+        if (status.startsWith('GO')) return `<span class="badge badge-go">UYGUN (GO)</span>`;
+        if (status.startsWith('CAUTION')) return `<span class="badge badge-caution">DİKKAT (BATARYA / EĞİM)</span>`;
+        return `<span class="badge badge-nogo">RİSKLİ (NO-GO)</span>`;
+    }
+
+    async function runSimulation() {
+        stopAnimation();
+        const loader = document.getElementById('loader');
+        loader.style.display = 'block';
+
+        const siteA = document.getElementById('siteA').value;
+        const dateA = document.getElementById('dateA').value;
+        const timeA = document.getElementById('timeA').value || "00:00";
+        const siteB = document.getElementById('siteB').value;
+        const dateB = document.getElementById('dateB').value;
+        const timeB = document.getElementById('timeB').value || "00:00";
+        const duration = document.getElementById('duration').value;
+
+        let url = `/api/compare?site_a=${siteA}&date_a=${dateA}&time_a=${timeA}&site_b=${siteB}&date_b=${dateB}&time_b=${timeB}&duration_days=${duration}`;
+        if (siteA === 'custom') {
+            const cLat = document.getElementById('customLat').value;
+            const cLon = document.getElementById('customLon').value;
+            url += `&custom_lat=${cLat}&custom_lon=${cLon}`;
+        }
+
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            CURRENT_DATA_A = data.site_a;
+            renderDashboard(data.site_a, data.site_b);
+        } catch (err) {
+            alert("Veri çekilirken hata oluştu: " + err);
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+
+    function renderLunar3DMap(siteAObj, activeIdB) {
+        if (!REAL_TERRAIN) return;
+
+        const axisKm = REAL_TERRAIN.terrain_3d.axis_km;
+        const zKm = REAL_TERRAIN.terrain_3d.z_km;
+        const sitesArr = Object.values(REAL_TERRAIN.sites);
+
+        const surfaceTrace = {
+            type: 'surface',
+            x: axisKm,
+            y: axisKm,
+            z: zKm,
+            colorscale: [
+                [0.0, '#090d16'],
+                [0.35, '#1e293b'],
+                [0.65, '#475569'],
+                [0.85, '#94a3b8'],
+                [1.0, '#f8fafc']
+            ],
+            showscale: false,
+            lighting: { ambient: 0.45, diffuse: 0.85, specular: 0.15, roughness: 0.85 },
+            lightposition: { x: 1000, y: 200, z: 120 },
+            hovertemplate: 'X: %{x} km<br>Y: %{y} km<br>Rakım: %{z} km<br><i>Buraya inmek için tıklayın</i><extra></extra>'
+        };
+
+        const ptsX = [], ptsY = [], ptsZ = [], texts = [], ids = [], colors = [], sizes = [];
+        sitesArr.forEach(s => {
+            if (s.is_equatorial) return; // Apollo 11 gibi ekvator referansları kutup haritası dışındadır
+            ptsX.push(s.x_km);
+            ptsY.push(s.y_km);
+            ptsZ.push(s.elevation_km + 0.65);
+            texts.push(s.name.split(': ').pop().split(' (')[0]);
+            ids.push(s.id);
+
+            if (s.id === siteAObj.id) {
+                colors.push('#38bdf8');
+                sizes.push(11);
+            } else if (s.id === activeIdB) {
+                colors.push('#fb923c');
+                sizes.push(9);
+            } else {
+                colors.push('#facc15');
+                sizes.push(7);
+            }
+        });
+
+        if (siteAObj.id === 'custom') {
+            ptsX.push(siteAObj.x_km);
+            ptsY.push(siteAObj.y_km);
+            ptsZ.push(siteAObj.elevation_km + 0.75);
+            texts.push(siteAObj.name);
+            ids.push('custom');
+            colors.push('#38bdf8');
+            sizes.push(12);
+        }
+
+        // Bilimsel Kalıcı Gölge Bölgeleri (Permanently Shadowed Regions - PSR Su Buzu Rezervleri)
+        const psrTrace = {
+            type: 'scatter3d',
+            mode: 'markers+text',
+            x: [-0.4, 24.0, 38.0, -3.0],
+            y: [-0.6, 82.0, 48.0, 62.0],
+            z: [-3.8, -2.1, -2.4, -2.8],
+            text: [
+                "❄️ Shackleton PSR (40 K)",
+                "❄️ Faustini PSR",
+                "❄️ Shoemaker PSR",
+                "❄️ Haworth PSR"
+            ],
+            textposition: 'bottom center',
+            textfont: { color: '#67e8f9', size: 9 },
+            marker: { symbol: 'diamond', color: '#06b6d4', size: 6, line: { color: '#083344', width: 1.5 } },
+            hovertemplate: '<b>%{text}</b><br>Kalıcı Gölge Bölgesi (PSR)<br>Sıcaklık: ~40 K (-233°C)<br>Kaynak: Milyarlarca Ton Su Buzu Rezervi<extra></extra>'
+        };
+
+        const markersTrace = {
+            type: 'scatter3d',
+            mode: 'markers+text',
+            x: ptsX,
+            y: ptsY,
+            z: ptsZ,
+            text: texts,
+            customdata: ids,
+            textposition: 'top center',
+            textfont: { color: '#f8fafc', size: 10 },
+            marker: { color: colors, size: sizes, line: { color: '#090d16', width: 2 } },
+            hovertemplate: '<b>%{text}</b><br>Konum: (%{x:.1f} km, %{y:.1f} km)<extra></extra>'
+        };
+
+        Plotly.newPlot('lunar3dMap', [surfaceTrace, psrTrace, markersTrace], {
+            paper_bgcolor: 'transparent',
+            margin: { t: 0, r: 0, b: 0, l: 0 },
+            scene: {
+                bgcolor: '#060911',
+                aspectmode: 'manual',
+                aspectratio: { x: 1, y: 1, z: 0.30 },
+                xaxis: { title: 'Dünya Yönü (km)', gridcolor: '#1e293b', color: '#64748b' },
+                yaxis: { title: 'Doğu-Batı (km)', gridcolor: '#1e293b', color: '#64748b' },
+                zaxis: { title: 'Yükseklik (km)', gridcolor: '#1e293b', color: '#64748b' },
+                camera: { eye: { x: 1.35, y: -1.35, z: 0.95 } }
+            }
+        }, { displayModeBar: false });
+
+        const mapEl = document.getElementById('lunar3dMap');
+        mapEl.removeAllListeners && mapEl.removeAllListeners('plotly_click');
+        mapEl.on('plotly_click', function(data) {
+            const pt = data.points[0];
+            if (!pt) return;
+            if (pt.customdata && pt.customdata !== 'custom') {
+                document.getElementById('siteA').value = pt.customdata;
+                toggleCustomBar();
+                runSimulation();
+            } else if (pt.x !== undefined && pt.y !== undefined) {
+                const rKm = Math.hypot(pt.x, pt.y);
+                const lat = -90.0 + (rKm / 30.323);
+                let lon = (Math.atan2(pt.y, pt.x) * 180.0) / Math.PI;
+                if (lon < 0) lon += 360.0;
+                document.getElementById('siteA').value = 'custom';
+                document.getElementById('customLat').value = lat.toFixed(2);
+                document.getElementById('customLon').value = lon.toFixed(2);
+                toggleCustomBar();
+                runSimulation();
+            }
+        });
+    }
+
+    function onSliderMove(val) {
+        if (!CURRENT_DATA_A) return;
+        SpaceSim.setFrame(CURRENT_DATA_A.timeline[parseInt(val)]);
+    }
+
+    function stopAnimation() {
+        if (ANIM_TIMER) { clearInterval(ANIM_TIMER); ANIM_TIMER = null; }
+        const btn = document.getElementById('playBtn');
+        if (btn) btn.textContent = "▶ Oynat";
+    }
+
+    function togglePlay() {
+        if (!CURRENT_DATA_A) return;
+        if (ANIM_TIMER) { stopAnimation(); return; }
+        document.getElementById('playBtn').textContent = "⏸ Durdur";
+        const slider = document.getElementById('timeSlider');
+        ANIM_TIMER = setInterval(() => {
+            let next = parseInt(slider.value) + 1;
+            if (next >= CURRENT_DATA_A.timeline.length) next = 0;
+            slider.value = next;
+            SpaceSim.setFrame(CURRENT_DATA_A.timeline[next]);
+        }, 110);
+    }
+
+    function renderDashboard(a, b) {
+        const m = a.metrics;
+        renderLunar3DMap(a.site, b.site.id);
+
+        // Three.js Gerçekçi 3D Sahneyi Güncelle
+        SpaceSim.updateSiteTerrain(a.site, a.timeline);
+        const slider = document.getElementById('timeSlider');
+        slider.max = a.timeline.length - 1;
+        slider.value = 0;
+        SpaceSim.setFrame(a.timeline[0]);
+
+        const sunsetText = m.sun_at_landing
+            ? (m.hours_to_sunset >= m.total_hours ? "Görev boyunca hiç batmıyor" : `İlk Gün Batımına: ${m.hours_to_sunset} saat`)
+            : `İnişte gölgede (Doğuşa: ${m.hours_to_sunset} saat)`;
+
+        const earthsetText = m.earth_at_landing
+            ? (m.hours_to_earthset >= m.total_hours ? "Görev boyunca kesintisiz açık" : `İlk İletişim Kesintisine: ${m.hours_to_earthset} saat`)
+            : `İnişte kesik (Bağlantıya: ${m.hours_to_earthset} saat)`;
+
+        const batteryAdvice = m.max_dark_streak_hours > 48
+            ? `Uzay aracı en fazla <strong>${m.max_dark_streak_hours} saat kesintisiz gölgede</strong> kalacağı için güçlü batarya ve termal ısıtıcı desteği şarttır.`
+            : `Kesintisiz karanlık süresi <strong>${m.max_dark_streak_hours} saat</strong> ile güvenli sınırlar içindedir.`;
+
+        document.getElementById('summaryBanner').innerHTML = `
+            <h2>Görev Değerlendirme Özeti: ${a.site.name} (Rakım: ${a.site.elevation_km} km | Eğim: ${a.site.slope_deg}°)</h2>
+            <p>
+                <strong>${a.start_date} UTC</strong> başlangıçlı <strong>${a.duration_days} günlük</strong> görevde güneşlenme
+                <strong>%${m.sun_visibility_pct}</strong> (Ort. Güneş Açısı: <strong>${m.avg_sun_elevation_deg}°</strong>),
+                Dünya iletişimi <strong>%${m.earth_comm_pct}</strong> oranındadır. ${batteryAdvice}
+            </p>
+        `;
+
+        document.getElementById('kpiGrid').innerHTML = `
+            <div class="kpi-card">
+                <div class="kpi-title">GENEL UYGUNLUK PUANI</div>
+                <div class="kpi-value" style="color: var(--accent)">${m.feasibility_score} / 100</div>
+                <div class="kpi-sub">${getBadge(m.status)}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">GÜNEŞ ENERJİSİ & GÜN BATIMI</div>
+                <div class="kpi-value" style="color: var(--sun)">%${m.sun_visibility_pct}</div>
+                <div class="kpi-sub">${sunsetText}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">EN UZUN KARANLIK SÜRESİ</div>
+                <div class="kpi-value" style="color: var(--danger)">${m.max_dark_streak_hours} Saat</div>
+                <div class="kpi-sub">Toplam ${m.sun_hours} saat şarj penceresi</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">DÜNYA İLETİŞİMİ & BATIŞ</div>
+                <div class="kpi-value" style="color: var(--earth)">%${m.earth_comm_pct}</div>
+                <div class="kpi-sub">${earthsetText} | Sinyal: ~1.28s OWLT</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">SU BUZU & PSR REZERVİ</div>
+                <div class="kpi-value" style="color: #38bdf8; font-size:1.35rem;">${m.psr_neighbor ? '❄️ Yüksek' : 'Düşük / Yok'}</div>
+                <div class="kpi-sub" style="font-size:0.75rem; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${m.water_ice_potential}">${m.water_ice_potential}</div>
+            </div>
+        `;
+
+        const times = a.timeline.map(t => t.datetime_utc);
+        const sunBar = {
+            x: times, y: a.timeline.map(() => 'Güneş Enerjisi'), mode: 'markers', type: 'scatter',
+            marker: { symbol: 'square', size: 14, color: a.timeline.map(t => t.sun_visible ? '#facc15' : '#1e293b') },
+            hovertext: a.timeline.map(t => `${t.datetime_utc} | ${t.sun_visible ? `GÜNEŞLİ (Panel Verimi: %${t.solar_power_pct})` : 'KARANLIK (Batarya)'}`),
+            hoverinfo: 'text'
+        };
+        const earthBar = {
+            x: times, y: a.timeline.map(() => 'Dünya İletişimi'), mode: 'markers', type: 'scatter',
+            marker: { symbol: 'square', size: 14, color: a.timeline.map(t => t.earth_visible ? '#4ade80' : '#1e293b') },
+            hovertext: a.timeline.map(t => `${t.datetime_utc} | ${t.earth_visible ? 'DÜNYA İLE BAĞLANTI VAR' : 'İLETİŞİM KESİK'}`),
+            hoverinfo: 'text'
+        };
+
+        Plotly.newPlot('timelineChart', [earthBar, sunBar], {
+            paper_bgcolor: 'transparent', plot_bgcolor: '#0b1120', font: { color: '#e2e8f0' }, showlegend: false,
+            xaxis: { title: 'Görev Zaman Çizelgesi (UTC)', gridcolor: '#1e293b', fixedrange: true },
+            yaxis: { gridcolor: '#1e293b', fixedrange: true },
+            margin: { t: 15, r: 20, b: 42, l: 120 }
+        }, { displayModeBar: false });
+
+        const mb = b.metrics;
+        document.getElementById('compareTable').innerHTML = `
+            <thead>
+                <tr>
+                    <th>Karşılaştırma Kriteri</th>
+                    <th>Seçenek A: ${a.site.name} (${a.start_date})</th>
+                    <th>Seçenek B: ${b.site.name} (${b.start_date})</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Genel Karar & Puan</td>
+                    <td><strong>${m.feasibility_score} Puan</strong> &nbsp;${getBadge(m.status)}</td>
+                    <td><strong>${mb.feasibility_score} Puan</strong> &nbsp;${getBadge(mb.status)}</td>
+                </tr>
+                <tr>
+                    <td>Güneş Aydınlanma & Ort. Açı</td>
+                    <td><strong>%${m.sun_visibility_pct}</strong> (${m.sun_hours} saat | Ort: ${m.avg_sun_elevation_deg}°)</td>
+                    <td><strong>%${mb.sun_visibility_pct}</strong> (${mb.sun_hours} saat | Ort: ${mb.avg_sun_elevation_deg}°)</td>
+                </tr>
+                <tr>
+                    <td>İlk Gün Batımına Kalan Süre</td>
+                    <td><strong>${m.hours_to_sunset} saat</strong> (Maks karanlık: ${m.max_dark_streak_hours} sa)</td>
+                    <td><strong>${mb.hours_to_sunset} saat</strong> (Maks karanlık: ${mb.max_dark_streak_hours} sa)</td>
+                </tr>
+                <tr>
+                    <td>Dünya İletişimi & İlk Kesinti</td>
+                    <td><strong>%${m.earth_comm_pct}</strong> (İlk kesintiye: ${m.hours_to_earthset} sa)</td>
+                    <td><strong>%${mb.earth_comm_pct}</strong> (İlk kesintiye: ${mb.hours_to_earthset} sa)</td>
+                </tr>
+                <tr>
+                    <td>Gerçek LOLA Eğim & Rakım</td>
+                    <td>Eğim: <strong>${a.site.slope_deg}°</strong> | Rakım: ${a.site.elevation_km} km</td>
+                    <td>Eğim: <strong>${b.site.slope_deg}°</strong> | Rakım: ${b.site.elevation_km} km</td>
+                </tr>
+                <tr>
+                    <td>Su Buzu & Kalıcı Gölge (PSR)</td>
+                    <td><strong>${m.water_ice_potential}</strong></td>
+                    <td><strong>${mb.water_ice_potential}</strong></td>
+                </tr>
+                <tr>
+                    <td>İletişim Kanalı & Sinyal Gecikmesi</td>
+                    <td>Doğrudan Dünya (DTE) | <strong>~1.28 sn</strong> (Tek Yön Işık Hızı)</td>
+                    <td>Doğrudan Dünya (DTE) | <strong>~1.28 sn</strong> (Tek Yön Işık Hızı)</td>
+                </tr>
+                <tr>
+                    <td>Ay Yalpalaması (Librasyon)</td>
+                    <td>Aktif (Dünya ufukta ±6° ila ±8° salınır)</td>
+                    <td>Aktif (Dünya ufukta ±6° ila ±8° salınır)</td>
+                </tr>
+            </tbody>
+        `;
+    }
+
+    function exportCSV() {
+        if (!CURRENT_DATA_A) return;
+        const rows = [["datetime_utc", "sun_az", "sun_el", "sun_horizon_limit", "sun_visible", "solar_power_pct", "earth_az", "earth_el", "earth_visible"]];
+        CURRENT_DATA_A.timeline.forEach(t => {
+            rows.push([t.datetime_utc, t.sun_az, t.sun_el, t.sun_horizon_limit, t.sun_visible, t.solar_power_pct, t.earth_az, t.earth_el, t.earth_visible]);
+        });
+        const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", `lunar_mission_${CURRENT_DATA_A.site.id}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    init();
+</script>
+</body>
+</html>
